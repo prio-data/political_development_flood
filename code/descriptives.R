@@ -1,7 +1,7 @@
 #### This code produces the analytics and descriptives for the paper Vesco et al.
-#### Produced by P. Vesco, last updated October 28, 2024
+#### Produced by P. Vesco, last updated June 30, 2025.
 
-#cleaning data for polimpact vulnerability paper
+
 rm(list = ls(all = TRUE))
 library(gpboost)
 library(utils)
@@ -576,7 +576,7 @@ for (spec in plot_specs) {
 
 #Time Trends 
 
-#Non lagged data
+#Read data
 df <- readRDS('data/data_final.rds')
 
 # Define the labels and colors for the key variables
@@ -662,3 +662,43 @@ combined_plot <- wrap_plots(plotlist = plot_list, ncol = 3)
 ggsave(paste0("results/descriptives/time_trends.png"), plot = combined_plot, device = "png", width = 10, height = 6, dpi = 350)
 
 
+
+#Create within and between variance table Supplementary Fig
+#Read data
+df <- readRDS('data/data_final.rds')
+
+
+
+vars <- c("e_wbgi_vae", "v2xpe_exlsocgr", "e_wbgi_gee", 
+               "v2x_rule", "decay_brds_c", "brd_12mb")
+
+
+# Compute between and within country standard deviations
+summary_sd <- df %>%
+  dplyr::select(gwcode, all_of(vars)) %>%
+  pivot_longer(-gwcode, names_to = "variable", values_to = "value") %>%
+  filter(!is.na(value)) %>%
+  group_by(variable) %>%
+  summarise(
+    between = {
+      country_means <- tapply(value, gwcode, mean, na.rm = TRUE)
+      sd(country_means, na.rm = TRUE)
+    },
+    within = {
+      country_sds <- tapply(value, gwcode, sd, na.rm = TRUE)
+      mean(country_sds, na.rm = TRUE)
+    }
+  ) %>%
+  mutate(ratio = within / between)  # Add the ratio column
+
+summary_sd <- summary_sd %>%
+  mutate(label = labels[variable]) %>%
+  dplyr::select(label, between, within, ratio)  # Include ratio in selection
+
+names(summary_sd) <- c("Variable", "Between-country SD", "Within-country SD", "Ratio (Within/Between)")
+
+modelsummary::datasummary_df(
+  summary_sd,
+  output = paste0("results/descriptives/variance_between_within.tex"), 
+  fmt = 2
+)

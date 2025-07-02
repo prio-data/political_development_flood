@@ -29,11 +29,11 @@ The data/ folder contains:
 
 The code/ folder is structured in three main scripts:
 
-1. descriptives.rda:
+1. descriptives.R:
 
 - Purpose: Produces descriptive tables and figures, including maps, summary statistics, and correlation plots.
 
-2. analysis.rda:
+2. analysis.R:
 
 - Purpose: Replicates the analysis and generates results for the manuscript and supplementary materials.
 
@@ -46,7 +46,7 @@ The code/ folder is structured in three main scripts:
 The results/ folder stores the results and it is created by the analysis.Rda script automatically. The results folder is organised in two main subfolders:
 
 1. descriptives: contains all descriptive figures and tables. 
-2. panel: contains the results of the main analysis presented in the manuscript as well as for the sensitivity tests. It is organised in different sub-folders according to the model specification. The subfolder "nogdp" stores the results for the main specification, the other sub-folders contain the results for the sensitivity tests.
+2. panel: contains the results of the main analysis presented in the manuscript as well as for the sensitivity tests. It is organised in different sub-folders according to the model specification. The subfolder "gdp" stores the results for the main specification, the other sub-folders contain the results for the sensitivity tests.
 
 
 ## INSTRUCTIONS TO RUN THE ANALYSIS
@@ -98,12 +98,12 @@ Execute analysis.rda to replicate the main analysis and generate results.
 
 - Additional instructions:
 
-By default, the script runs with `NOGDP = TRUE` to produce the main results reported in the manuscript. The default setting does not re-train the model but loads the pre-trained models stored in the results folder. 
+By default, the script runs with `GDP = TRUE` to produce the main results reported in the manuscript. The default setting does not re-train the model but loads the pre-trained models stored in the results folder. 
 We recommend this setting for faster compilation.
 
 To explore alternative model specifications as outlined in the Supplementary Information, adjust the parameters at the beginning of the script. For example:
 NOCHI <- TRUE  # Exclude China
-NOGDP <- FALSE  # Disable the main specification
+GDP <- FALSE  # Disable the main specification
 
 Ensure all other parameters are set to `FALSE` unless required.
 
@@ -124,7 +124,7 @@ Execute rf.R to train random forest models and compute Shapley values.
 
 ## Reproducibility
 
-Bayesian models incorporate uncertainty estimates, leading to slight variations in results even with fixed seeds (set.seed()), particularly when using parallel processing. This is expected. 
+Due to the inherent stochasticity of parallel processing, retraining the models lead to slight variations in results even with fixed seeds (set.seed()). This is expected.
 These minor differences do not affect the validity of the conclusions.
 
 ## Support

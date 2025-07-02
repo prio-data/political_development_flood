@@ -1,7 +1,7 @@
 #### This code replicates the analysis in Vesco et al.
 #### Produced by P. Vesco, last updated October 28, 2024
 
-#The script sets up the RF model formulas, fits the models, and calculates the Shapley values presented in Fig S7 in SI
+#The script sets up the RF model formulas, fits the models, and calculates the Shapley values presented in the SI.
 
 rm(list = ls(all = TRUE))
 
@@ -68,31 +68,38 @@ loadfonts(device="win")
 
 
 SEEDNUM = 352024
-TRAIN_MODELS <- FALSE # To fit the models set this to TRUE
+TRAIN_MODELS <- TRUE # To fit the models set this to TRUE
 NOGDP <-  FALSE ## As it is set up currently, the script runs the analysis for the MAIN SPECIFICATION presented in the manuscript
 
 ###To run the tests presented in the Supplementary Material, you need to set the appropriate test to TRUE 
 
-GDP <- FALSE
-AFFECTED <- FALSE 
+GDP <-  FALSE ## As it is set up currently, the script runs the analysis for the MAIN SPECIFICATION presented in the manuscript
+
+###To run the tests presented in the Supplementary Material, you need to set the appropriate test to TRUE 
+
+
+NOGDP <- FALSE 
+AFFECTED <- FALSE
 DEAD <- FALSE
 OUTLIER <- FALSE
-AGG <-   FALSE
 NOLOC <-   FALSE
 NOIND <- FALSE
 NOMMR <-  FALSE
 NOCHI <- FALSE
 NOBNG <- FALSE
 CUTOFF <- FALSE
-INTER <- FALSE
+INTER <- FALSE 
 NORE <- FALSE
 NOYEAR <- FALSE
 ECONTEST <- FALSE
+SPLIT <- FALSE
+AGG <-   FALSE
+FE <- FALSE
 RF <- TRUE
 
-#### DEFINE RESULTS FOLDER ####
+####  DEFINE RESULTS FOLDER ####
 getwd()
-setwd("")
+setwd("/Users/paola.vesco/ViEWS Dropbox/Paola Vesco/paola/projects/polimpact/flood_paper")
 
 
 RESULT_FOLDER <- "results/panel"
@@ -125,17 +132,17 @@ df$continent <- factor(df$continent)
 
 log_vars <- c("duration", "population_affected" , "wdi_gdppc", "brd_12mb", "decay_brds_c", "nevents_sum10", "hdi_l1")
 
-if(GDP | ECONTEST | INTER ){
-  v_baseline <- c("dfo_severity", "duration", "nevents_sum10", "population_affected", "rugged", "hdi_l1", "wdi_gdppc", "tropical_flood")
+if(NOGDP ){
+  v_baseline <- c("dfo_severity", "duration", "nevents_sum10", "population_affected", "rugged", "tropical_flood")
 } else if (NOLOC){
   v_baseline <- c("dfo_severity", "duration", "nevents_sum10", "population_affected", "rugged", "tropical_flood", "wdi_gdppc")
 } else {
-  v_baseline <- c("dfo_severity", "duration", "nevents_sum10", "population_affected", "rugged", "tropical_flood")
+  v_baseline <- c("dfo_severity", "duration", "nevents_sum10", "population_affected", "rugged", "tropical_flood", "v2x_rule", "hdi_l1", "wdi_gdppc", "continent", "year")
 }
 
 
-preds <- c(v_baseline, "year", "brd_12mb", "decay_brds_c", "v2xpe_exlsocgr", 
-           "e_wbgi_vae", "e_wbgi_gee", "v2x_rule", "continent")
+preds <- c(v_baseline, "brd_12mb", "decay_brds_c", "v2xpe_exlsocgr", 
+           "e_wbgi_vae", "e_wbgi_gee")
 
 all <- c("dead_w", preds)
 
@@ -160,24 +167,32 @@ train <- train %>%
 test <- test %>%
   mutate(tropical_flood_dummy = as.integer(tropical_flood > 0))
 
+library(ranger)
+
+train$continent <- factor(train$continent)
+test$continent <- factor(test$continent, levels = levels(train$continent))
+
+train$continent_nevents <- as.numeric(as.factor(train$continent)) * train$nevents_sum10
+test$continent_nevents <- as.numeric(as.factor(test$continent)) * test$nevents_sum10
 
 #####################################
 
 if(TRAIN_MODELS){
-baseline <- randomForest(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged + tropical_flood_dummy + year,
-                         data = train, ntree = 1000, mtry = 3, importance = TRUE, seed = SEEDNUM)
-conflict_country <- randomForest(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged + tropical_flood_dummy + decay_brds_c + year,
-                                 data = train, ntree = 1000, mtry = 3, importance = TRUE, seed = SEEDNUM)
-conflict_sub <- randomForest(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged + tropical_flood_dummy + brd_12mb + year,
-                             data = train, ntree = 1000, mtry = 3, importance = TRUE, seed = SEEDNUM)
-accountability <- randomForest(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + tropical_flood_dummy + e_wbgi_vae + year,
-                               data = train, ntree = 1000, mtry = 3, importance = TRUE, seed = SEEDNUM)
-goveff <- randomForest(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged + tropical_flood_dummy + e_wbgi_gee + year,
-                       data = train, ntree = 1000, mtry = 3, importance = TRUE, seed = SEEDNUM)
-inclusion <- randomForest(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged + tropical_flood_dummy + v2xpe_exlsocgr + year,
-                          data = train, ntree = 1000, mtry = 3, importance = TRUE, seed = SEEDNUM)
-ruleoflaw <- randomForest(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged + tropical_flood_dummy + v2x_rule + year,
-                          data = train, ntree = 1000, mtry = 3, importance = TRUE, seed = SEEDNUM)
+baseline <- ranger(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged  + hdi_l1 + wdi_gdppc + tropical_flood_dummy  + continent + continent_nevents + year,
+                         data = train, num.trees = 10000, mtry = 4, importance = "permutation", seed = SEEDNUM, respect.unordered.factors = "partition")
+conflict_country <- ranger(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged  + hdi_l1 + wdi_gdppc + tropical_flood_dummy  + continent + continent_nevents + year + decay_brds_c,
+                                 data = train, num.trees = 10000, mtry = 4, importance = "permutation", seed = SEEDNUM, respect.unordered.factors = "partition")
+conflict_sub <- ranger(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged  + hdi_l1 + wdi_gdppc + tropical_flood_dummy  + continent + continent_nevents + year + brd_12mb,
+                             data = train, num.trees = 10000, mtry = 4, importance = "permutation", seed = SEEDNUM, respect.unordered.factors = "partition")
+accountability <- ranger(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged  + hdi_l1 + wdi_gdppc + tropical_flood_dummy  + continent  + continent_nevents + year + e_wbgi_vae,
+                               data = train, num.trees = 10000, mtry = 4, importance = "permutation", seed = SEEDNUM, respect.unordered.factors = "partition")
+goveff <- ranger(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged  + hdi_l1 + wdi_gdppc + tropical_flood_dummy  + e_wbgi_gee + continent_nevents + year,
+                       data = train, num.trees = 10000, mtry = 4, importance = "permutation", seed = SEEDNUM, respect.unordered.factors = "partition")
+inclusion <- ranger(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged  + hdi_l1 + wdi_gdppc + tropical_flood_dummy  + continent  + continent_nevents + year + v2xpe_exlsocgr,
+                          data = train, num.trees = 10000, mtry = 4, importance = "permutation", seed = SEEDNUM, respect.unordered.factors = "partition")
+ruleoflaw <- ranger(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged  + hdi_l1 + wdi_gdppc + tropical_flood_dummy + v2x_rule + continent  + continent_nevents + year,
+                          data = train, num.trees = 10000, mtry = 4, importance = "permutation", seed = SEEDNUM, respect.unordered.factors = "partition")
+
 
 # Save the trained models
 saveRDS(baseline, paste0(models_path, "baseline_model.rds"))
@@ -188,6 +203,7 @@ saveRDS(goveff, paste0(models_path, "goveff_model.rds"))
 saveRDS(inclusion, paste0(models_path, "inclusion_model.rds"))
 saveRDS(ruleoflaw, paste0(models_path, "ruleoflaw_model.rds"))
 }
+
 fit_baseline <- readRDS(paste0(models_path, "baseline_model.rds"))
 fit_conflict_country <- readRDS(paste0(models_path, "conflict_country_model.rds"))
 fit_conflict_sub <- readRDS(paste0(models_path, "conflict_sub_model.rds"))
@@ -224,7 +240,7 @@ fit_df <- tibble(
   mname = names(all_models))
 
 # Define the baseline and political feature sets
-baseline_features <- c("dfo_severity", "duration", "nevents_sum10", "population_affected", "rugged", "tropical_flood_dummy", "year")
+baseline_features <- c("dfo_severity", "duration", "nevents_sum10", "population_affected", "rugged", "tropical_flood_dummy",  "hdi_l1", "wdi_gdppc","year","continent", "continent_nevents")
 
 # Map model names to their corresponding political features
 political_feature_map <- list(
@@ -235,10 +251,11 @@ political_feature_map <- list(
   "Inclusion" = "v2xpe_exlsocgr",
   "Rule of law" = "v2x_rule"
 )
-# Custom predict function for random forest models
+
 predict_rf <- function(model, newdata) {
-  return(as.numeric(predict(model, newdata)))
+  predict(model, data = newdata)$predictions
 }
+
 
 # Create an empty list to store global SHAP values
 global_shap_list <- list()
@@ -266,6 +283,7 @@ for (model_name in names(political_feature_map)) {
     predict.fun = predict_rf
   )
   
+  
   # Compute the SHAP values
   shapley <- Shapley$new(predictor, x.interest = test_data)
   
@@ -280,6 +298,22 @@ for (model_name in names(political_feature_map)) {
   # Store the global SHAP values
   global_shap_list[[model_name]] <- global_shap_importance
 }
+
+colors <- c(
+  'Accountability' = "#8eade8",
+  'Inclusion' = "#3c61a3",
+  'Gov. effectiveness' = "#f2aed8",
+  'Rule of law' = "#c556d1",
+  'Conflict history' = "#f5b342",
+  'Local conflict' = "#f0843c", 
+  'Baseline' = "#CCCCCC", 
+  'dfo_severity' = "#CCCCCC",
+  'duration' = "#CCCCCC",
+  'nevents_sum10' = "#CCCCCC",
+  'rugged' = "#CCCCCC",  # Not in plot, but for completeness
+  'tropical_flood' = "#CCCCCC",  # Not in plot, but for completeness
+  "wdi_gdppc" = "#CCCCCC",
+  "hdi_l1"= "#CCCCCC")
 
 # Combine all the global SHAP importances into one data frame for plotting
 global_shap_df <- bind_rows(global_shap_list, .id = "Model")
@@ -296,29 +330,70 @@ global_shap_df <- global_shap_df %>%
     TRUE ~ feature  # Keep original name if no match
   ))
 
-# Filter only the political features for plotting
-political_shap_df <- global_shap_df %>%
-  filter(feature %in% c("Accountability", "Inclusion", "Gov. effectiveness", "Rule of law", "Conflict history", "Local conflict"))
-# Sort the global SHAP values by importance before plotting
-political_shap_df <- political_shap_df %>%
-  arrange(importance) # Sort by importance in descending order
 
-# Plot the global SHAP values with custom colors and increased label sizes
-shap <- ggplot(political_shap_df, aes(x = reorder(Model, -importance), y = importance, fill = feature)) +
-  geom_bar(stat = "identity", position = "stack") +
-  coord_flip() +
-  labs(
-       x = "",
-       y = "Global SHAP values",
-       fill = "Political Feature") +
+# Compute baseline averages
+baseline_shap_df <- global_shap_df %>%
+  filter(feature %in% baseline_features) %>%
+  group_by(Model) %>%
+  summarise(importance = mean(importance), feature = "Baseline")
+
+# Extract political SHAP values
+political_shap_df <- global_shap_df %>%
+  filter(feature %in% names(political_feature_map))
+
+# Combine baseline and political data
+combined_shap_df <- political_shap_df %>%
+  bind_rows(baseline_shap_df) %>%
+  mutate(bar_type = ifelse(feature == "Baseline", "Baseline", "Political"))
+
+# For ordering, get political importance sorted descending
+ordering_df <- political_shap_df %>%
+  arrange(desc(importance)) %>%
+  mutate(Model = factor(Model, levels = rev(unique(Model)))) %>%
+  dplyr::select(Model, importance_order = importance)
+
+combined_shap_df <- combined_shap_df %>%
+  left_join(ordering_df, by = "Model") %>%
+  arrange(importance_order, bar_type) %>%
+  mutate(
+    Model = factor(Model, levels = rev(unique(ordering_df$Model))),
+    bar_type = factor(bar_type, levels = c("Baseline", "Political"))
+  )
+
+# Set the vertical offset for baseline bars
+combined_shap_df <- combined_shap_df %>%
+  mutate(bar_position = as.numeric(Model) + ifelse(bar_type == "Baseline", -0.2, 0.2))
+
+# Your provided colors
+colors <- c(
+  'Accountability' = "#8eade8",
+  'Inclusion' = "#3c61a3",
+  'Gov. effectiveness' = "#f2aed8",
+  'Rule of law' = "#c556d1",
+  'Conflict history' = "#f5b342",
+  'Local conflict' = "#f0843c",
+  'Baseline' = "#CCCCCC"
+)
+
+# Final corrected plot
+shap <- ggplot(combined_shap_df, aes(y = importance, x = bar_position, fill = feature)) +
+  geom_bar(stat = "identity", width = 0.35) +
   scale_fill_manual(values = colors) +
+  scale_x_continuous(
+    breaks = seq_along(levels(combined_shap_df$Model)),
+    labels = levels(combined_shap_df$Model)
+  ) +
+  coord_flip() +
+  labs(y = "Mean SHAP value", x = "") +
   theme_bw() +
   theme(
     legend.position = "none",
-    axis.text = element_text(size = 20, color = "black"),      # Increase axis label size
-    axis.title = element_text(size = 20, color = "black"),     # Increase axis title size
-    plot.title = element_text(size = 20, color = "black"), # Increase plot title size
-    legend.text = element_text(size = 20, color = "black")
+    axis.text = element_text(size = 16, color = "black"),
+    axis.title = element_text(size = 18, color = "black")
   )
 
-ggsave(filename = paste0(plots_path, "/shapley.png"), plot = shap, width = 10, height = 6)
+shap
+
+# Save your plot
+#ggsave(filename = paste0(plots_path, "/shapley.png"), plot = shap, width = 10, height = 6)
+

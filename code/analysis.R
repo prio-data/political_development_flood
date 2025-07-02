@@ -1,5 +1,5 @@
 #### This code replicates the analysis in Vesco et al.
-#### Produced by P. Vesco, last updated October 28, 2024
+#### Produced by P. Vesco, last updated June 30, 2025
 
 #The script sets up the model formulas, fits the models, calculates the LOO-CV statistics, creates performance tables and runs the counterfactual analysis presented in the manuscript and SM
 
@@ -65,40 +65,48 @@ library(dbarts)
 library(cowplot)
 library(magick)
 library(webshot2)
+library(fixest)              
+library(modelsummary)
+
 
 font_import()
 loadfonts(device="win")
 
 SEEDNUM = 352024
 TRAIN_MODELS <- FALSE # To fit the models set this to TRUE
-NOGDP <-  TRUE ## As it is set up currently, the script runs the analysis for the MAIN SPECIFICATION presented in the manuscript
+GDP <-  TRUE ## As it is set up currently, the script runs the analysis for the MAIN SPECIFICATION presented in the manuscript
 
 ###To run the tests presented in the Supplementary Material, you need to set the appropriate test to TRUE 
 
-GDP <- FALSE 
-AFFECTED <- FALSE
+
 DEAD <- FALSE
 OUTLIER <- FALSE
-AGG <-   FALSE
 NOLOC <-   FALSE
 NOIND <- FALSE
 NOMMR <-  FALSE
 NOCHI <- FALSE
 NOBNG <- FALSE
 CUTOFF <- FALSE
-INTER <- FALSE
+INTER <- FALSE 
 NORE <- FALSE
 NOYEAR <- FALSE
-ECONTEST <- FALSE
 SPLIT <- FALSE
-NOBORDER <- FALSE
+AFFECTED <- FALSE
+AGG <-   FALSE
+FE <- FALSE
+ECONTEST <- FALSE
+NOGDP <- FALSE 
+
 
 #### DEFITRUE#### DEFINE RESULTS FOLDER ####
 getwd()
+setwd("/Users/paola.vesco/ViEWS Dropbox/Paola Vesco/paola/projects/polimpact/flood_paper")
+
 
 RESULT_FOLDER <- "results/panel"
 
 if(GDP){ RESULT_FOLDER <- paste(RESULT_FOLDER, paste0("GDP"), sep = "/")} 
+if(FE){ RESULT_FOLDER <- paste(RESULT_FOLDER, paste0("FE"), sep = "/")} 
 if(AFFECTED){ RESULT_FOLDER <- paste(RESULT_FOLDER, paste0("affected"), sep = "/")}
 if(DEAD){ RESULT_FOLDER <- paste(RESULT_FOLDER, paste0("deaths"), sep = "/")}
 if(CUTOFF){ RESULT_FOLDER <- paste(RESULT_FOLDER, paste0("cutoff"), sep = "/")}
@@ -115,7 +123,6 @@ if(INTER){ RESULT_FOLDER <- paste(RESULT_FOLDER, paste0("interactions"), sep = "
 if(NORE){ RESULT_FOLDER <- paste(RESULT_FOLDER, paste0("norandomeffects"), sep = "/")}
 if(NOYEAR){ RESULT_FOLDER <- paste(RESULT_FOLDER, paste0("noyeartrends"), sep = "/")} 
 if(SPLIT){ RESULT_FOLDER <- paste(RESULT_FOLDER, paste0("random_split"), sep = "/")} 
-if(NOBORDER){ RESULT_FOLDER <- paste(RESULT_FOLDER, paste0("noborder"), sep = "/")} 
 
 results_path <- paste0(getwd(),"/",RESULT_FOLDER)
 models_path <- paste0(results_path,"/bayes_models/")
@@ -140,28 +147,32 @@ df <- readRDS('data/data_final.rds')
 df$gwcode <- factor(df$gwcode)
 df$continent <- factor(df$continent)
 
+log_vars <- c("duration", "nevents_sum10", "population_affected", "wdi_gdppc", "hdi_l1", "brd_12mb", "decay_brds_c")
 
-log_vars <- c("duration", "population_affected" , "wdi_gdppc", "brd_12mb", "decay_brds_c", "nevents_sum10", "hdi_l1")
 
-
-if(GDP | NOGDP | AGG | NOLOC | CUTOFF | ECONTEST | INTER | NORE | NOYEAR | SPLIT | NOBORDER){df <-  subset(df, df$population_affected > 0)
+if(GDP | NOGDP | AGG | NOLOC | CUTOFF | ECONTEST | INTER | NORE | NOYEAR | SPLIT){df <-  subset(df, df$population_affected > 0)
 df <- df %>%   
   mutate(across(all_of(log_vars), .fns = function(x) log(x+1)))
-  df$dead_w <- as.integer(df$dead_w)
+df$dead_w <- as.integer(df$dead_w)
 }
 
+if(FE){df <-  subset(df, df$population_affected > 0)
+df <- df %>%   
+  mutate(across(all_of(log_vars), .fns = function(x) log(x+1)))
+  df$year <- factor(df$year)
+}
 
 if(DEAD){
-df <- subset(df, df$dead_w > 0)
-df <- df %>% 
-  mutate(across(all_of(log_vars), .fns = function(x) log(x+1)))
+  df <- subset(df, df$dead_w > 0)
+  df <- df %>% 
+    mutate(across(all_of(log_vars), .fns = function(x) log(x+1)))
   df$dead_w <- as.integer(df$dead_w)
 }
 
 if(AFFECTED){
   df = subset(df, df$population_affected > 1000)
   df <- df %>% 
-  mutate(across(all_of(log_vars), .fns = function(x) log(x+1)))
+    mutate(across(all_of(log_vars), .fns = function(x) log(x+1)))
   df$dead_w <- as.integer(df$dead_w)
 }
 
@@ -170,7 +181,7 @@ if(OUTLIER){
   df = subset(df, df$population_affected > 0)
   df <-  filter(df, dead_w < 79828)
   df <- df %>%   
-  mutate(across(all_of(log_vars), .fns = function(x) log(x+1)))
+    mutate(across(all_of(log_vars), .fns = function(x) log(x+1)))
   df$dead_w <- as.integer(df$dead_w)
 }
 
@@ -178,7 +189,7 @@ if(NOMMR){
   df <-  subset(df, df$gwcode != 775)
   df = subset(df, df$population_affected > 0)
   df <- df %>%   
-  mutate(across(all_of(log_vars), .fns = function(x) log(x+1)))
+    mutate(across(all_of(log_vars), .fns = function(x) log(x+1)))
   df$dead_w <- as.integer(df$dead_w)
 }
 
@@ -205,52 +216,42 @@ if(NOBNG){
     mutate(across(all_of(log_vars), .fns = function(x) log(x+1)))
   df$dead_w <- as.integer(df$dead_w)
 }
-if(NOBORDER){
-  # Step 1: Group by event_id and count unique gwcode
-  event_gwcode_count <- df %>%
-  group_by(event_id) %>%
-  summarise(unique_gwcode_count = n_distinct(gwcode))
-  
-  # Filter for event_id that have exactly 1 gwcode (only one country)
-  single_gwcode_events <- event_gwcode_count %>%
-    filter(unique_gwcode_count == 1)
-  
-  # subset the original data to retain only rows where event_id is in single_gwcode_events
-  df <- df %>%
-  filter(event_id %in% single_gwcode_events$event_id)
-}
+
 
 
 
 ##define formulas for models
 
-if(GDP | ECONTEST | INTER ){
-  v_baseline <- c("dfo_severity", "duration", "nevents_sum10", "population_affected", "rugged", "hdi_l1", "wdi_gdppc", "tropical_flood")
-} else if (NOLOC){
-  v_baseline <- c("dfo_severity", "duration", "nevents_sum10", "population_affected", "rugged", "tropical_flood", "wdi_gdppc")
-} else {
+if(NOGDP){
   v_baseline <- c("dfo_severity", "duration", "nevents_sum10", "population_affected", "rugged", "tropical_flood")
+}else if (NOLOC){
+  v_baseline <- c("dfo_severity", "duration", "nevents_sum10", "population_affected", "rugged", "tropical_flood", "wdi_gdppc")
+} else if(FE) {
+  v_baseline <- c("dfo_severity", "duration", "nevents_sum10", "population_affected", "hdi_l1", "wdi_gdppc", "tropical_flood", "gwcode")
+}else {
+  v_baseline <- c("dfo_severity", "duration", "nevents_sum10", "population_affected", "rugged", "hdi_l1", "wdi_gdppc", "tropical_flood")
 }
 
 
 preds <- c(v_baseline, "year", "brd_12mb", "decay_brds_c", "v2xpe_exlsocgr", 
-           "e_wbgi_vae", "e_wbgi_gee", "v2x_rule", "v2x_polyarchy", "continent")
+           "e_wbgi_vae", "e_wbgi_gee", "v2x_rule", "v2x_polyarchy", "hdi_l1", "wdi_gdppc", "continent")
 
 all <- c("dead_w", preds)
 
 if(CUTOFF){
-train <- df %>% dplyr::filter(year >= 2000 & year <= 2010) %>% dplyr::select(all)
-test <- df %>% dplyr::filter(year >= 2011) %>% dplyr::select(all)
+  train <- df %>% dplyr::filter(year >= 2000 & year <= 2010) %>% dplyr::select(all)
+  test <- df %>% dplyr::filter(year >= 2011) %>% dplyr::select(all)
 }else if (SPLIT) {
   smp_size <- floor(0.8 * nrow(df))
   train_ind <- sample(seq_len(nrow(df)), size = smp_size)
   train <- df[train_ind, ] %>% dplyr::select(all)
   test <- df[-train_ind, ] %>% dplyr::select(all)
-  }else{
+}else{
   train <- df %>% dplyr::filter(year >= 2000 & year <= 2014) %>% dplyr::select(all)
   test <- df %>% dplyr::filter(year >= 2015) %>% dplyr::select(all)
   
 }
+
 train <- train %>%
   mutate(tropical_flood_dummy = as.integer(tropical_flood > 0))
 test <- test %>%
@@ -262,107 +263,183 @@ test <- test %>%
 #train the models
 
 if(TRAIN_MODELS){
-  plan(multicore, workers = 4)  # Set the number of workers to the number of available cores
-  # Set the number of cores for parallel processing
-  options(mc.cores = parallel::detectCores())
-    if(GDP) {
-      formulas <- list(
-        baseline = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged + hdi_l1 + wdi_gdppc + I(tropical_flood >0)  + year +  (1 + nevents_sum10 | continent)),
-        conflict_country = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged + hdi_l1 + wdi_gdppc + I(tropical_flood >0)  + decay_brds_c + year + (1 + nevents_sum10 | continent)),
-        conflict_sub = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged + hdi_l1 + wdi_gdppc + I(tropical_flood >0)  + brd_12mb + year  + (1 + nevents_sum10 | continent)),
-        accountability = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged + hdi_l1 + wdi_gdppc + I(tropical_flood >0)  + e_wbgi_vae + year + (1 + nevents_sum10 | continent)),
-        goveff = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged + hdi_l1 + wdi_gdppc + I(tropical_flood >0)  + e_wbgi_gee + year + (1 + nevents_sum10 | continent)),
-        inclusion = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged + hdi_l1 + wdi_gdppc + I(tropical_flood >0)  +v2xpe_exlsocgr + year + (1 + nevents_sum10 | continent)),
-        ruleoflaw = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged + hdi_l1 + wdi_gdppc + I(tropical_flood >0)  + v2x_rule + year + (1 + nevents_sum10 | continent)))
-    }else if(INTER) {
-      formulas <- list(
-        baseline = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged + hdi_l1 + wdi_gdppc + I(tropical_flood >0)  + year +  (1 + nevents_sum10 | continent)),
-        conflict_country = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged + hdi_l1 + wdi_gdppc + I(tropical_flood >0)  + decay_brds_c + wdi_gdppc*decay_brds_c + year + (1 + nevents_sum10 | continent)),
-        conflict_sub = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged + hdi_l1 + wdi_gdppc + I(tropical_flood >0)  + brd_12mb  + wdi_gdppc*brd_12mb + year  + (1 + nevents_sum10 | continent)),
-        accountability = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged + hdi_l1 + wdi_gdppc + I(tropical_flood >0)  + e_wbgi_vae + wdi_gdppc*e_wbgi_vae + year + (1 + nevents_sum10 | continent)),
-        goveff = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged + hdi_l1 + wdi_gdppc + I(tropical_flood >0)  + e_wbgi_gee + wdi_gdppc*e_wbgi_gee + year + (1 + nevents_sum10 | continent)),
-        inclusion = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged + hdi_l1 + wdi_gdppc + I(tropical_flood >0)  +v2xpe_exlsocgr + wdi_gdppc*v2xpe_exlsocgr + year + (1 + nevents_sum10 | continent)),
-        ruleoflaw = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged + hdi_l1 + wdi_gdppc + I(tropical_flood >0)  + v2x_rule + wdi_gdppc*v2x_rule + year + (1 + nevents_sum10 | continent)))
-    }else if (AGG) {
+  if (FE){
+    formulas <- list(
+      baseline = (dead_w ~ dfo_severity + duration + nevents_sum10 + 
+                    population_affected  + hdi_l1 + wdi_gdppc + 
+                    I(tropical_flood > 0) | gwcode + year),
+      conflict_country = (dead_w ~ dfo_severity + duration + nevents_sum10 + 
+                            population_affected   + hdi_l1 + wdi_gdppc +
+                            I(tropical_flood > 0) + decay_brds_c | gwcode + year),
+      conflict_sub = (dead_w ~ dfo_severity + duration + nevents_sum10 +
+                        population_affected + hdi_l1  + wdi_gdppc +
+                        I(tropical_flood > 0) + brd_12mb | gwcode + year),
+      accountability = (dead_w ~ dfo_severity + duration + nevents_sum10 +
+                          population_affected  + hdi_l1 + wdi_gdppc +
+                          I(tropical_flood > 0) + e_wbgi_vae | gwcode + year),
+      goveff = (dead_w ~ dfo_severity + duration + nevents_sum10 +
+                  population_affected + hdi_l1  + wdi_gdppc +
+                  I(tropical_flood > 0) + e_wbgi_gee | gwcode + year),
+      inclusion = (dead_w ~ dfo_severity + duration + nevents_sum10 +
+                     population_affected  + hdi_l1 + wdi_gdppc +
+                     I(tropical_flood > 0) + v2xpe_exlsocgr | gwcode + year),
+      ruleoflaw = (dead_w ~ dfo_severity + duration + nevents_sum10 +
+                     population_affected + hdi_l1 + wdi_gdppc +
+                     I(tropical_flood > 0) + v2x_rule | gwcode + year), 
+      poly = (dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + hdi_l1 + wdi_gdppc + I(tropical_flood >0)  + v2x_polyarchy  | gwcode + year))
+  }else if(INTER) {
+    plan(multicore, workers = 4, future.seed = TRUE)
+    # Set the number of cores for parallel processing
+    options(mc.cores = parallel::detectCores())
+    formulas <- list(
+      baseline = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged + hdi_l1 + wdi_gdppc + I(tropical_flood >0)  + year +  (1 + nevents_sum10 | continent)),
+      conflict_country = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged + hdi_l1 + wdi_gdppc + I(tropical_flood >0)  + decay_brds_c + wdi_gdppc*decay_brds_c + year + (1 + nevents_sum10 | continent)),
+      conflict_sub = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged + hdi_l1 + wdi_gdppc + I(tropical_flood >0)  + brd_12mb  + wdi_gdppc*brd_12mb + year  + (1 + nevents_sum10 | continent)),
+      accountability = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged + hdi_l1 + wdi_gdppc + I(tropical_flood >0)  + e_wbgi_vae + wdi_gdppc*e_wbgi_vae + year + (1 + nevents_sum10 | continent)),
+      goveff = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged + hdi_l1 + wdi_gdppc + I(tropical_flood >0)  + e_wbgi_gee + wdi_gdppc*e_wbgi_gee + year + (1 + nevents_sum10 | continent)),
+      inclusion = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged + hdi_l1 + wdi_gdppc + I(tropical_flood >0)  +v2xpe_exlsocgr + wdi_gdppc*v2xpe_exlsocgr + year + (1 + nevents_sum10 | continent)),
+      ruleoflaw = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged + hdi_l1 + wdi_gdppc + I(tropical_flood >0)  + v2x_rule + wdi_gdppc*v2x_rule + year + (1 + nevents_sum10 | continent)))
+  }else if (AGG) {
+    # Define the model formulas based on your variables
+    plan(multicore, workers = 4, future.seed = TRUE)
+    # Set the number of cores for parallel processing
+    options(mc.cores = parallel::detectCores())
+    formulas <- list(
+      baseline = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged + hdi_l1 + wdi_gdppc + I(tropical_flood >0)  + year + (1 + nevents_sum10 | continent)),
+      conflict = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged + hdi_l1 + wdi_gdppc + I(tropical_flood >0)  + brd_12mb + decay_brds_c + year + (1 + nevents_sum10 | continent)),
+      democracy = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged + hdi_l1 + wdi_gdppc + I(tropical_flood >0)  + e_wbgi_vae + v2xpe_exlsocgr + year + (1 + nevents_sum10 | continent)),
+      instqual = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged + hdi_l1 + wdi_gdppc + I(tropical_flood >0)  + e_wbgi_gee  + v2x_rule + year + (1 + nevents_sum10 | continent)),
+      poly = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged + hdi_l1 + wdi_gdppc + I(tropical_flood >0)  + v2x_polyarchy + year + (1 + nevents_sum10 | continent)),
+      all = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged + hdi_l1 + wdi_gdppc + I(tropical_flood >0)  + e_wbgi_vae + v2xpe_exlsocgr  + e_wbgi_gee + v2x_rule + decay_brds_c + brd_12mb + year + (1 + nevents_sum10 | continent))
+    )
+  } else if(NOLOC) {
+    # Define the model formulas based on your variables
+    plan(multicore, workers = 4, future.seed = TRUE)
+    # Set the number of cores for parallel processing
+    options(mc.cores = parallel::detectCores())
+    formulas <- list(
+      baseline = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged  + wdi_gdppc + I(tropical_flood >0)  + year +  (1 + nevents_sum10 | continent)),
+      conflict_country = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged  + wdi_gdppc + I(tropical_flood >0)  + decay_brds_c + year + (1 + nevents_sum10 | continent)),
+      accountability = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged  + wdi_gdppc  + I(tropical_flood >0)  + e_wbgi_vae + year + (1 + nevents_sum10 | continent)),
+      goveff = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged  + wdi_gdppc + I(tropical_flood >0)  + e_wbgi_gee + year + (1 + nevents_sum10 | continent)),
+      inclusion = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged  + wdi_gdppc  + I(tropical_flood >0)  +v2xpe_exlsocgr + year + (1 + nevents_sum10 | continent)),
+      ruleoflaw = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged  + wdi_gdppc + I(tropical_flood >0)  + v2x_rule + year + (1 + nevents_sum10 | continent)))
+  } else if (ECONTEST){
+    plan(multicore, workers = 4, future.seed = TRUE)
+    # Set the number of cores for parallel processing
+    options(mc.cores = parallel::detectCores())
+    formulas <- list(
+      gdpbase = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged + wdi_gdppc + hdi_l1  + I(tropical_flood >0)  + year + (1 + nevents_sum10 | continent)),
+      nogdpbase = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged + I(tropical_flood >0)  + year +  (1 + nevents_sum10 | continent)),
+      nogdpconf = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged + I(tropical_flood >0) +  year +  brd_12mb + decay_brds_c + (1 + nevents_sum10 | continent))
+    )
+  }else if (NORE){
+    # Define the model formulas based on your variables
+    plan(multicore, workers = 4, future.seed = TRUE)
+    # Set the number of cores for parallel processing
+    options(mc.cores = parallel::detectCores())
+    formulas <- list(
+      baseline = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged + hdi_l1 + wdi_gdppc + I(tropical_flood >0)  + year ),
+      conflict_country = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + hdi_l1 + wdi_gdppc + rugged + I(tropical_flood >0)   + decay_brds_c + year),
+      conflict_sub = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + hdi_l1 + wdi_gdppc + rugged + I(tropical_flood >0)  + brd_12mb  + year),
+      accountability = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected   + rugged + hdi_l1 + wdi_gdppc + I(tropical_flood >0)  + e_wbgi_vae + year),
+      goveff = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged + hdi_l1 + wdi_gdppc + I(tropical_flood >0)  + e_wbgi_gee + year),
+      inclusion = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged + hdi_l1 + wdi_gdppc + I(tropical_flood >0)  + v2xpe_exlsocgr),
+      ruleoflaw = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged + hdi_l1 + wdi_gdppc + I(tropical_flood >0)  + v2x_rule + year)
+    )
+  }else if (NOYEAR){
+    # Define the model formulas based on your variables
+    plan(multicore, workers = 4, future.seed = TRUE)
+    # Set the number of cores for parallel processing
+    options(mc.cores = parallel::detectCores())
+    formulas <- list(
+      baseline = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged + hdi_l1 + wdi_gdppc + I(tropical_flood >0)   + (1 + nevents_sum10 | continent)),
+      conflict_country = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged  + hdi_l1 + wdi_gdppc+ I(tropical_flood >0)   + decay_brds_c  + (1 + nevents_sum10 | continent)),
+      conflict_sub = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged + hdi_l1 + wdi_gdppc+ I(tropical_flood >0)  + brd_12mb   + (1 + nevents_sum10 | continent)),
+      accountability = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected  + rugged + hdi_l1 + wdi_gdppc + I(tropical_flood >0)  + e_wbgi_vae  + (1 + nevents_sum10 | continent)),
+      goveff = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged + hdi_l1 + wdi_gdppc + I(tropical_flood >0)  + e_wbgi_gee  + (1 + nevents_sum10 | continent)),
+      inclusion = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged + hdi_l1 + wdi_gdppc + I(tropical_flood >0)  + v2xpe_exlsocgr  + (1 + nevents_sum10 | continent)),
+      ruleoflaw = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged + hdi_l1 + wdi_gdppc + I(tropical_flood >0)  + v2x_rule  + (1 + nevents_sum10 | continent))
+    )
+  } else if (NOGDP) {
+    # Define the model formulas based on your variables
+    plan(multicore, workers = 4, future.seed = TRUE)
+    # Set the number of cores for parallel processing
+    options(mc.cores = parallel::detectCores())
+    formulas <- list(
+      baseline = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged  + I(tropical_flood >0)  + year + (1 + nevents_sum10 | continent)),
+      conflict_country = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged + I(tropical_flood >0)   + decay_brds_c + year + (1 + nevents_sum10 | continent)),
+      conflict_sub = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged + I(tropical_flood >0)  + brd_12mb  + year + (1 + nevents_sum10 | continent)),
+      accountability = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected  + rugged  + I(tropical_flood >0)  + e_wbgi_vae + year + (1 + nevents_sum10 | continent)),
+      goveff = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged  + I(tropical_flood >0)  + e_wbgi_gee + year + (1 + nevents_sum10 | continent)),
+      inclusion = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged  + I(tropical_flood >0)  + v2xpe_exlsocgr + year + (1 + nevents_sum10 | continent)),
+      ruleoflaw = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged + I(tropical_flood >0)  + v2x_rule + year + (1 + nevents_sum10 | continent)),
+      poly = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged + I(tropical_flood >0)  + v2x_polyarchy + year + (1 + nevents_sum10 | continent))
+    ) } else {
       # Define the model formulas based on your variables
+      plan(multicore, workers = 4, future.seed = TRUE)
+      # Set the number of cores for parallel processing
+      options(mc.cores = parallel::detectCores())
       formulas <- list(
-        baseline = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged + I(tropical_flood >0)  + year + (1 + nevents_sum10 | continent)),
-        conflict = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged + I(tropical_flood >0)  + brd_12mb + decay_brds_c + year + (1 + nevents_sum10 | continent)),
-        democracy = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged + I(tropical_flood >0)  + e_wbgi_vae + v2xpe_exlsocgr + year + (1 + nevents_sum10 | continent)),
-        instqual = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged + I(tropical_flood >0)  + e_wbgi_gee  + v2x_rule + year + (1 + nevents_sum10 | continent)),
-        poly = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged + I(tropical_flood >0)  + v2x_polyarchy + year + (1 + nevents_sum10 | continent)),
-        all = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged + I(tropical_flood >0)  + e_wbgi_vae + v2xpe_exlsocgr  + e_wbgi_gee + v2x_rule + decay_brds_c + brd_12mb + year + (1 + nevents_sum10 | continent))
-      )
-    } else if(NOLOC) {
-      # Define the model formulas based on your variables
-      formulas <- list(
-        baseline = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged   + I(tropical_flood >0)  + year +  (1 + nevents_sum10 | continent)),
-        conflict_country = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged   + I(tropical_flood >0)  + decay_brds_c + year + (1 + nevents_sum10 | continent)),
-        accountability = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged   + I(tropical_flood >0)  + e_wbgi_vae + year + (1 + nevents_sum10 | continent)),
-        goveff = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged  + I(tropical_flood >0)  + e_wbgi_gee + year + (1 + nevents_sum10 | continent)),
-        inclusion = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged   + I(tropical_flood >0)  +v2xpe_exlsocgr + year + (1 + nevents_sum10 | continent)),
-        ruleoflaw = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged  + I(tropical_flood >0)  + v2x_rule + year + (1 + nevents_sum10 | continent)))
-    } else if (ECONTEST){
-      formulas <- list(
-        gdpbase = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged + wdi_gdppc + hdi_l1  + I(tropical_flood >0)  + year + (1 + nevents_sum10 | continent)),
-        nogdpbase = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged + I(tropical_flood >0)  + year +  (1 + nevents_sum10 | continent)),
-        nogdpconf = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged + I(tropical_flood >0) +  year +  brd_12mb + decay_brds_c + (1 + nevents_sum10 | continent))
-      )
-    }else if (NORE){
-      # Define the model formulas based on your variables
-      formulas <- list(
-        baseline = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged  + I(tropical_flood >0)  + year ),
-        conflict_country = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged + I(tropical_flood >0)   + decay_brds_c + year),
-        conflict_sub = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged + I(tropical_flood >0)  + brd_12mb  + year),
-        accountability = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + I(tropical_flood >0)  + e_wbgi_vae + year),
-        goveff = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged  + I(tropical_flood >0)  + e_wbgi_gee + year),
-        inclusion = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged  + I(tropical_flood >0)  + v2xpe_exlsocgr),
-        ruleoflaw = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged + I(tropical_flood >0)  + v2x_rule + year)
-      )
-    }else if (NOYEAR){
-      # Define the model formulas based on your variables
-      formulas <- list(
-        baseline = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged  + I(tropical_flood >0)   + (1 + nevents_sum10 | continent)),
-        conflict_country = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged + I(tropical_flood >0)   + decay_brds_c  + (1 + nevents_sum10 | continent)),
-        conflict_sub = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged + I(tropical_flood >0)  + brd_12mb   + (1 + nevents_sum10 | continent)),
-        accountability = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected   + I(tropical_flood >0)  + e_wbgi_vae  + (1 + nevents_sum10 | continent)),
-        goveff = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged  + I(tropical_flood >0)  + e_wbgi_gee  + (1 + nevents_sum10 | continent)),
-        inclusion = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged  + I(tropical_flood >0)  + v2xpe_exlsocgr  + (1 + nevents_sum10 | continent)),
-        ruleoflaw = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged + I(tropical_flood >0)  + v2x_rule  + (1 + nevents_sum10 | continent))
-      )
-    }else{
-      # Define the model formulas based on your variables
-      formulas <- list(
-        baseline = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged  + I(tropical_flood >0)  + year + (1 + nevents_sum10 | continent)),
-        conflict_country = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged + I(tropical_flood >0)   + decay_brds_c + year + (1 + nevents_sum10 | continent)),
-        conflict_sub = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged + I(tropical_flood >0)  + brd_12mb  + year + (1 + nevents_sum10 | continent)),
-        accountability = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected   + I(tropical_flood >0)  + e_wbgi_vae + year + (1 + nevents_sum10 | continent)),
-        goveff = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged  + I(tropical_flood >0)  + e_wbgi_gee + year + (1 + nevents_sum10 | continent)),
-        inclusion = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged  + I(tropical_flood >0)  + v2xpe_exlsocgr + year + (1 + nevents_sum10 | continent)),
-        ruleoflaw = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged + I(tropical_flood >0)  + v2x_rule + year + (1 + nevents_sum10 | continent)),
-        poly = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged + I(tropical_flood >0)  + v2x_polyarchy + year + (1 + nevents_sum10 | continent))
-      )
-  }
+        baseline = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged  + hdi_l1 + wdi_gdppc + I(tropical_flood >0)  + year + (1 + nevents_sum10 | continent)),
+        conflict_country = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged + hdi_l1 + wdi_gdppc + I(tropical_flood >0)   + decay_brds_c + year + (1 + nevents_sum10 | continent)),
+        conflict_sub = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged + hdi_l1 + wdi_gdppc + I(tropical_flood >0)  + brd_12mb  + year + (1 + nevents_sum10 | continent)),
+        accountability = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected  + rugged + hdi_l1 + wdi_gdppc + I(tropical_flood >0)  + e_wbgi_vae + year + (1 + nevents_sum10 | continent)),
+        goveff = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged  + hdi_l1 + wdi_gdppc + I(tropical_flood >0)  + e_wbgi_gee + year + (1 + nevents_sum10 | continent)),
+        inclusion = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged + hdi_l1 + wdi_gdppc + I(tropical_flood >0)  + v2xpe_exlsocgr + year + (1 + nevents_sum10 | continent)),
+        ruleoflaw = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged + hdi_l1 + wdi_gdppc + I(tropical_flood >0)  + v2x_rule + year + (1 + nevents_sum10 | continent)),
+        poly = bf(dead_w ~ dfo_severity + duration + nevents_sum10 + population_affected + rugged + hdi_l1 + wdi_gdppc + I(tropical_flood >0)  + v2x_polyarchy + year + (1 + nevents_sum10 | continent)))
+    }
   
   # Fit the models using the 'brm' function from the 'brms' package
-  models <- map(formulas, ~brm(
-    formula = .x,
-    data = train,
-    family = negbinomial(),
-    chains = 8,
-    iter = 3000,
-    warmup = 1000,
-    control = list(adapt_delta = 0.99, max_treedepth = 12),
-    backend = "cmdstanr",
-    threads = threading(5),
-    save_pars = save_pars(all = TRUE),
-    seed = SEEDNUM
-  ))
+  if (FE) {
+    models <- map(formulas, ~fepois(.x, data = df))
+    walk2(models, names(models), ~saveRDS(.x, paste0(models_path, .y, "_model.rds")))
+  }else if (NOBNG) { #Due to convergence issues for models omitting Bangladesh (smaller sample) increase iterations
+    models <- map(formulas, ~brm(
+      formula = .x,
+      data = train,
+      family = negbinomial(),
+      chains = 12,             
+      iter = 15000,            
+      warmup = 7500,          
+      control = list(
+        adapt_delta = 0.999999,  
+        max_treedepth = 25,      
+        step_size = 0.0001        
+      ),
+      backend = "cmdstanr",
+      threads = threading(3),   
+      save_pars = save_pars(all = TRUE),
+      seed = SEEDNUM,
+      init = "0",              
+      refresh = 200           
+    ))
+  }else {
+    models <- map(formulas, ~brm(
+      formula = .x,
+      data = train,
+      family = negbinomial(),
+      chains = 8,
+      iter = 6000,           
+      warmup = 2000,         
+      control = list(
+        adapt_delta = 0.9999,  
+        max_treedepth = 15     
+      ),
+      backend = "cmdstanr",
+      threads = threading(5),
+      save_pars = save_pars(all = TRUE),
+      seed = SEEDNUM
+    ))
+  }
   
   # Save the models as RDS files
   walk2(models, names(models), ~saveRDS(.x, paste0(models_path, .y, "_model.rds")))
-  }
-  
+}
+
+# Re train fit accountability for NOBNG since it did not converge!
+
 
 #### Load the  models from saved RDS files
 if(AGG){
@@ -372,26 +449,34 @@ if(AGG){
   fit_instqual <- readRDS(paste0(models_path, "instqual_model.rds"))
   fit_poly <- readRDS(paste0(models_path, "poly_model.rds"))
   fit_all <- readRDS(paste0(models_path, "all_model.rds"))
-  } else if (NOLOC){
+} else if (NOLOC){
   fit_baseline <- readRDS(paste0(models_path, "baseline_model.rds"))
   fit_conflict_country <- readRDS(paste0(models_path, "conflict_country_model.rds"))
   fit_accountability <- readRDS(paste0(models_path, "accountability_model.rds"))
   fit_goveff <- readRDS(paste0(models_path, "goveff_model.rds"))
   fit_inclusion <- readRDS(paste0(models_path, "inclusion_model.rds"))
   fit_ruleoflaw <- readRDS(paste0(models_path, "ruleoflaw_model.rds"))
-  } else if(ECONTEST){
+} else if(ECONTEST){
   fit_gdpbase <- readRDS(paste0(models_path, "gdpbase_model.rds"))
   fit_nogdpbase <- readRDS(paste0(models_path, "nogdpbase_model.rds"))
   fit_nogdpconf <- readRDS(paste0(models_path, "nogdpconf_model.rds"))
-  } else{
-fit_baseline <- readRDS(paste0(models_path, "baseline_model.rds"))
-fit_conflict_country <- readRDS(paste0(models_path, "conflict_country_model.rds"))
-fit_conflict_sub <- readRDS(paste0(models_path, "conflict_sub_model.rds"))
-fit_accountability <- readRDS(paste0(models_path, "accountability_model.rds"))
-fit_goveff <- readRDS(paste0(models_path, "goveff_model.rds"))
-fit_inclusion <- readRDS(paste0(models_path, "inclusion_model.rds"))
-fit_ruleoflaw <- readRDS(paste0(models_path, "ruleoflaw_model.rds"))
-fit_poly <- readRDS(paste0(models_path, "poly_model.rds"))
+} else if(GDP){
+  fit_baseline <- readRDS(paste0(models_path, "baseline_model.rds"))
+  fit_conflict_country <- readRDS(paste0(models_path, "conflict_country_model.rds"))
+  fit_conflict_sub <- readRDS(paste0(models_path, "conflict_sub_model.rds"))
+  fit_accountability <- readRDS(paste0(models_path, "accountability_model.rds"))
+  fit_goveff <- readRDS(paste0(models_path, "goveff_model.rds"))
+  fit_inclusion <- readRDS(paste0(models_path, "inclusion_model.rds"))
+  fit_ruleoflaw <- readRDS(paste0(models_path, "ruleoflaw_model.rds"))
+  fit_poly <- readRDS(paste0(models_path, "poly_model.rds"))
+}else{
+  fit_baseline <- readRDS(paste0(models_path, "baseline_model.rds"))
+  fit_conflict_country <- readRDS(paste0(models_path, "conflict_country_model.rds"))
+  fit_conflict_sub <- readRDS(paste0(models_path, "conflict_sub_model.rds"))
+  fit_accountability <- readRDS(paste0(models_path, "accountability_model.rds"))
+  fit_goveff <- readRDS(paste0(models_path, "goveff_model.rds"))
+  fit_inclusion <- readRDS(paste0(models_path, "inclusion_model.rds"))
+  fit_ruleoflaw <- readRDS(paste0(models_path, "ruleoflaw_model.rds"))
 }
 
 
@@ -399,96 +484,103 @@ fit_poly <- readRDS(paste0(models_path, "poly_model.rds"))
 
 #Figure S6.
 
-if(NOGDP){
-summary(fit_baseline)
+library(rstan)
 
-
-posterior_samples <- as_draws_df(fit_baseline)
-# Trace plot for parameters
-trace_plot <- mcmc_trace(posterior_samples, pars = c("b_Intercept", "b_dfo_severity", "b_duration", "b_nevents_sum10",  "b_rugged", "b_Itropical_flood>0TRUE", "b_year"))
-
-# Assuming the parameter names in your model are as follows
-param_names <- c("Intercept", "Flood severity", "Flood duration", 
-                 "Past flood events", "Rugged terrain", "Tropical flood", "Year")
-
-# Customizing the labels to match your parameters
-custom_labels <- c(
-  b_Intercept = "Intercept",
-  b_dfo_severity = "Flood severity",
-  b_duration = "Flood duration",
-  b_nevents_sum10 = "Past flood events",
-  b_rugged = "Rugged terrain",
-  `b_Itropical_flood>0TRUE` = "Tropical flood",
-  b_year = "Year"
-)
-
-generate_parameter_plots <- function(parameter_name, custom_label) {
- 
-  hist_plot <- mcmc_hist(
-    posterior_samples,
-    pars = parameter_name
-  ) +
-    theme_minimal() +
-    theme(axis.line = element_line(), 
-          axis.ticks = element_line(),
-          panel.grid.minor = element_blank(),
-          plot.background = element_rect(fill = "white", color = "white"),
-          panel.background = element_rect(fill = "white", color = "white"),
-      text = element_text(family = "Arial", size = 12), 
-      plot.title = element_text(size = 12, hjust = 0.5),
-      axis.title = element_text(size = 12),
-      axis.text = element_text(size = 12),
+if(GDP){
+  summary(fit_baseline)
+  
+  
+  posterior_samples <- as_draws_df(fit_baseline)
+  # Trace plot for parameters
+  trace_plot <- mcmc_trace(posterior_samples, pars = c("b_Intercept", "b_dfo_severity", "b_duration", "b_nevents_sum10",  "b_rugged", "b_Itropical_flood>0TRUE",  "b_wdi_gdppc", "b_hdi_l1", "b_year"))
+  
+  # Assuming the parameter names in your model are as follows
+  param_names <- c("Intercept", "Flood severity", "Flood duration", 
+                   "Past flood events", "Rugged terrain", "Tropical flood", "National GDP per capita", "Local HDI", "Year")
+  
+  # Customizing the labels to match your parameters
+  custom_labels <- c(
+    b_Intercept = "Intercept",
+    b_dfo_severity = "Flood severity",
+    b_duration = "Flood duration",
+    b_nevents_sum10 = "Past flood events",
+    b_rugged = "Rugged terrain",
+    `b_Itropical_flood>0TRUE` = "Tropical flood",
+    `b_wdi_gdppc` ="National GDP per capita",
+    `b_hdi_l1` ="Local HDI",
+    b_year = "Year"
+  )
+  
+  generate_parameter_plots <- function(parameter_name, custom_label) {
+    
+    hist_plot <- mcmc_hist(
+      posterior_samples,
+      pars = parameter_name
     ) +
-    labs(
-      y = "Frequency",
-      x = "Value",
-      title = custom_label
-    )
-  
-  
-  trace_plot <- mcmc_trace(
-    posterior_samples,
-    pars = parameter_name,
-    facet_args = list(labeller = as_labeller(custom_labels))
-  ) +
-    theme_minimal() +
-    theme(axis.line = element_line(), 
-          axis.ticks = element_line(),
-          panel.grid.minor = element_blank(),
-          plot.background = element_rect(fill = "white", color = "white"),
-          panel.background = element_rect(fill = "white", color = "white"),
-      text = element_text(family = "Arial", size = 12), 
-      plot.title = element_text(size = 12, hjust = 0.5),
-      axis.title = element_text(size = 12),
-      axis.text = element_text(size = 12),
-      strip.text = element_text(size = 12), 
-      legend.position = "none"
+      theme_minimal() +
+      theme(axis.line = element_line(), 
+            axis.ticks = element_line(),
+            panel.grid.minor = element_blank(),
+            plot.background = element_rect(fill = "white", color = "white"),
+            panel.background = element_rect(fill = "white", color = "white"),
+            text = element_text(family = "Arial", size = 12), 
+            plot.title = element_text(size = 12, hjust = 0.5),
+            axis.title = element_text(size = 12),
+            axis.text = element_text(size = 12),
+      ) +
+      labs(
+        y = "Frequency",
+        x = "Value",
+        title = custom_label
+      )
+    
+    
+    trace_plot <- mcmc_trace(
+      posterior_samples,
+      pars = parameter_name,
+      facet_args = list(labeller = as_labeller(custom_labels))
     ) +
-    labs(
-      y = "Value",
-      x = "Iteration",
-      title = custom_label
-    )
+      theme_minimal() +
+      theme(axis.line = element_line(), 
+            axis.ticks = element_line(),
+            panel.grid.minor = element_blank(),
+            plot.background = element_rect(fill = "white", color = "white"),
+            panel.background = element_rect(fill = "white", color = "white"),
+            text = element_text(family = "Arial", size = 12), 
+            plot.title = element_text(size = 12, hjust = 0.5),
+            axis.title = element_text(size = 12),
+            axis.text = element_text(size = 12),
+            strip.text = element_text(size = 12), 
+            legend.position = "none"
+      ) +
+      labs(
+        y = "Value",
+        x = "Iteration",
+        title = custom_label
+      )
+    
+    
+    combined_plot <- hist_plot + trace_plot
+    
+    return(combined_plot)
+  }
   
+  combined_plots <- list()
+  for (param in names(custom_labels)) {
+    combined_plots[[param]] <- generate_parameter_plots(param, custom_labels[[param]])
+  }
   
-  combined_plot <- hist_plot + trace_plot
+  all_plots_combined <- wrap_plots(combined_plots, ncol = 1)
   
-  return(combined_plot)
+  print(all_plots_combined)
+  
+  ggsave(paste0(plots_path, "convergence_fitbaseline.png"), plot = all_plots_combined, 
+         width = 8, height = 15,dpi = 350)
+  
 }
 
-combined_plots <- list()
-for (param in names(custom_labels)) {
-  combined_plots[[param]] <- generate_parameter_plots(param, custom_labels[[param]])
-}
 
-all_plots_combined <- wrap_plots(combined_plots, ncol = 1)
 
-print(all_plots_combined)
-
-ggsave(paste0(plots_path, "convergence_fitbaseline.png"), plot = all_plots_combined, 
-       width = 5, height = 11,dpi = 350)
-
-}
 ###ANALYSIS AND VISUALISATION####
 
 ###relative performance 
@@ -504,31 +596,40 @@ if(AGG){
     fit_poly, 
     fit_all)
 } else if(ECONTEST) {
-    all_models <- list(
-      fit_gdpbase,
-      fit_nogdpbase,
-      fit_nogdpconf
-    )
-  }else if(NOLOC){
-      all_models <- list(
-        fit_baseline,
-        fit_conflict_country,
-        fit_accountability,
-        fit_goveff,
-        fit_inclusion,
-        fit_ruleoflaw)
-      } else {
-      all_models <- list(
-  fit_baseline,
-  fit_conflict_country,
-  fit_conflict_sub,
-  fit_accountability,
-  fit_goveff,
-  fit_inclusion,
-  fit_ruleoflaw, 
-  fit_poly)
+  all_models <- list(
+    fit_gdpbase,
+    fit_nogdpbase,
+    fit_nogdpconf
+  )
+}else if(NOLOC){
+  all_models <- list(
+    fit_baseline,
+    fit_conflict_country,
+    fit_accountability,
+    fit_goveff,
+    fit_inclusion,
+    fit_ruleoflaw)
+} else if (GDP){
+  all_models <- list(
+    fit_baseline,
+    fit_conflict_country,
+    fit_conflict_sub,
+    fit_accountability,
+    fit_goveff,
+    fit_inclusion,
+    fit_ruleoflaw, 
+    fit_poly)
+}else {
+  all_models <- list(
+    fit_baseline,
+    fit_conflict_country,
+    fit_conflict_sub,
+    fit_accountability,
+    fit_goveff,
+    fit_inclusion,
+    fit_ruleoflaw)
 }
-  
+
 # Name the list for convenience
 if(AGG){names(all_models) <- c(
   "Baseline",
@@ -537,12 +638,12 @@ if(AGG){names(all_models) <- c(
   "Institutional quality",
   "Electoral democracy", 
   "All"
-  )} else if(ECONTEST){
-    names(all_models) <- list(
-      "Baseline w GDP", 
-      "Baseline w/o GDP", 
-      "Baseline w/o GDP + conflict")
-  }else if(NOLOC){
+)} else if(ECONTEST){
+  names(all_models) <- list(
+    "Baseline w GDP", 
+    "Baseline w/o GDP", 
+    "Baseline w/o GDP + conflict")
+}else if(NOLOC){
   names(all_models) <- c(
     "Baseline",
     "Conflict history",
@@ -550,9 +651,9 @@ if(AGG){names(all_models) <- c(
     "Gov. effectiveness",
     "Inclusion",
     "Rule of law"
-    )
-}else {
-    names(all_models) <- c(
+  )
+}else if (GDP){
+  names(all_models) <- c(
     "Baseline",
     "Conflict history",
     "Local conflict",
@@ -562,13 +663,23 @@ if(AGG){names(all_models) <- c(
     "Rule of law", 
     "Electoral democracy"
   )
+}else {
+  names(all_models) <- c(
+    "Baseline",
+    "Conflict history",
+    "Local conflict",
+    "Accountability",
+    "Gov. effectiveness",
+    "Inclusion",
+    "Rule of law"
+  )
 }
 
 # Now, create a tibble that contains all  models
 fit_df <- tibble(
   fits = all_models,
   mname = names(all_models))
- 
+
 # Create a list that directly references the fits in fit_df for easier access
 models <- fit_df$fits
 names(models) <- fit_df$mname
@@ -589,30 +700,316 @@ custom_labels <- c(e_wbgi_vae = "Accountability",
                    rugged = "Rugged terrain",
                    tropical_flood = "Tropical flood",
                    wdi_gdppc = "National GDP per capita",
-                   hdi_l1 = "Local HDI")
+                   hdi_l1 = "Local HDI", 
+                   "Itropical_flood>0TRUE" = "Tropical flood", 
+                   year = "Year")
 
-# Directly extract AIC values into a matrix, one row per model
-
-if(NOGDP && TRAIN_MODELS){tab_model(fit_baseline,
-          fit_accountability,
-          fit_inclusion,
-          fit_goveff,
-          fit_ruleoflaw, 
-          fit_conflict_country,
-          fit_conflict_sub,
-          show.ci = TRUE, 
-          file = paste0(tables_path, "regression_table.html"),
-          title = "In-sample negative binomial regression models",
-          pred.labels = custom_labels, 
-          dv.labels = c("Baseline",
-                        "Accountability",
-                        "Inclusion",
-                        "Gov. effectiveness",
-                        "Rule of law",
-                        "Conflict history",
-                        "Local conflict")
+ordered_labels_fe <- c(population_affected = "Exposed population",
+                    dfo_severity = "Flood severity",
+                    duration = "Flood duration",
+                    nevents_sum10 = "Past flood events",
+                    rugged = "Rugged terrain",
+                    "Itropical_flood>0TRUE" = "Tropical flood",
+                    wdi_gdppc = "National GDP per capita",
+                    hdi_l1 = "Local HDI",
+                    e_wbgi_vae = "Accountability",
+                    v2xpe_exlsocgr = "Inclusion",
+                    e_wbgi_gee = "Gov. effectiveness",
+                    v2x_rule = "Rule of law",
+                    decay_brds_c = "Conflict history",
+                    brd_12mb = "Local conflict",
+                    v2x_polyarchy = "Electoral democracy", 
+                    "FE: gwcode" = "Country fixed effects",
+                    "FE: factor(year)" = "Year fixed effects"
 )
+
+ordered_labels <- c(population_affected = "Exposed population",
+                    dfo_severity = "Flood severity",
+                    duration = "Flood duration",
+                    nevents_sum10 = "Past flood events",
+                    rugged = "Rugged terrain",
+                    "Itropical_flood>0TRUE" = "Tropical flood",
+                    wdi_gdppc = "National GDP per capita",
+                    hdi_l1 = "Local HDI",
+                    e_wbgi_vae = "Accountability",
+                    v2xpe_exlsocgr = "Inclusion",
+                    e_wbgi_gee = "Gov. effectiveness",
+                    v2x_rule = "Rule of law",
+                    decay_brds_c = "Conflict history",
+                    brd_12mb = "Local conflict")
+
+custom_fe_rows <- tibble::tibble(
+  term = c("Country fixed effects", "Year fixed effects"),
+  "Accountability"    = c("X", "X"),
+  "Inclusion"         = c("X", "X"),
+  "Gov. effectiveness"= c("X", "X"),
+  "Rule of law"       = c("X", "X"),
+  "Conflict history"  = c("X", "X"),
+  "Local conflict"    = c("X", "X"),
+  "Baseline"          = c("X", "X")
+)
+# Named colors
+colors <- c(
+  'e_wbgi_vae' = "#8eade8",
+  'v2xpe_exlsocgr' = "#3c61a3",
+  'e_wbgi_gee' = "#f2aed8",
+  'v2x_rule' = "#c556d1",
+  'decay_brds_c' = "#f5b342",
+  'brd_12mb' = "#f0843c",
+  "v2x_polyarchy" = "#5df0e1",
+  'population_affected' = "#CCCCCC",
+  'dfo_severity' = "#CCCCCC",
+  'duration' = "#CCCCCC",
+  'nevents_sum10' = "#CCCCCC",
+  'rugged' = "#CCCCCC",  # Not in plot, but for completeness
+  'tropical_flood' = "#CCCCCC",  # Not in plot, but for completeness
+  "wdi_gdppc" = "#CCCCCC",
+  "hdi_l1"= "#CCCCCC"
+)
+
+
+if(GDP){
+    # 1) extract as before, but make `model` a factor
+    coefs_df <- lapply(names(models), function(mn){
+      broom.mixed::tidy(
+        models[[mn]],
+        effects  = "fixed",
+        conf.int = TRUE
+      ) %>%
+        mutate(model = mn)  # character for now
+    }) %>%
+      bind_rows() %>%
+      # turn `model` into a factor in the desired order
+      mutate(model = factor(model, levels = names(models))) %>%
+      # exponentiate, invert exclusion, etc.
+      mutate(
+        IRR     = exp(estimate),
+        CI_low  = exp(conf.low),
+        CI_high = exp(conf.high)
+      ) %>%
+      # FIXED: Proper inversion with CI bounds swapping
+      mutate(
+        IRR_temp = if_else(term == "v2xpe_exlsocgr", 1/IRR, IRR),
+        CI_low_temp = if_else(term == "v2xpe_exlsocgr", 1/CI_high, CI_low),  # Note: CI_high becomes CI_low
+        CI_high_temp = if_else(term == "v2xpe_exlsocgr", 1/CI_low, CI_high), # Note: CI_low becomes CI_high
+        IRR = IRR_temp,
+        CI_low = CI_low_temp,
+        CI_high = CI_high_temp
+      ) %>%
+     dplyr:: select(-IRR_temp, -CI_low_temp, -CI_high_temp)
+    
+    # 2) build the two-line cell
+    table_df <- coefs_df %>%
+      filter(term %in% names(ordered_labels)) %>%
+      mutate(term = factor(term, levels = names(ordered_labels))) %>%
+      arrange(term, model) %>%
+      mutate(
+        cell = sprintf(
+          "%.3f \\\\n[%.3f, %.3f]",
+          IRR, CI_low, CI_high
+        )
+      ) %>%
+      dplyr::select(model, term, cell) %>%
+      pivot_wider(
+        names_from  = model,
+        values_from = cell
+      ) %>%
+      mutate(
+        term_label = ordered_labels[as.character(term)]
+      ) %>%
+      # now select in exactly the `models` order:
+      dplyr::select(term_label, all_of(names(models)))
+    
+    # 3) print
+    library(kableExtra)
+    kable(
+      table_df,
+      format    = "latex",
+      booktabs  = TRUE,
+      align     = c("l", rep("c", length(models))),
+      caption   = "\\textbf{Negative binomial models with random effects (in-sample)}",
+      label     = "tab:gdp",
+      escape    = FALSE,
+      linesep   = ""
+    ) %>%
+      kable_styling(
+        latex_options = "hold_position",
+        font_size     = 8
+      ) %>%
+      add_header_above(c(" " = 1, "Models" = length(models)))
+  }
+
+
+
+if (FE) {
+  models <- list(
+    "Baseline"           = fit_baseline,
+    "Accountability"     = fit_accountability,
+    "Inclusion"          = fit_inclusion,
+    "Gov. effectiveness" = fit_goveff,
+    "Rule of law"        = fit_ruleoflaw,
+    "Conflict history"   = fit_conflict_country,
+    "Local conflict"     = fit_conflict_sub
+  )
+  
+  #Reverse exclusion variable for visualization
+  cf <- models$Inclusion$coeftable
+  
+  # If needed: ensure it has column names
+  if (is.null(colnames(cf))) {
+    colnames(cf) <- c("", "Estimate", "Std.Error", "z value", "Pr(>|z|)")
+  }
+  
+  cf <- as.matrix(cf)
+  #storage.mode(cf) <- "numeric"
+  
+  # Save original log estimate
+  log_est <- cf[, "Estimate"]
+  
+  cf[, "Estimate"] <- log_est
+  
+  # Transform std.error: se × exp(beta)
+  cf[, "Std. Error"] <- log_est * cf[, "Std. Error"]
+  
+  # Reverse the coef of the exclusion variable (to reflect "inclusion") in log form
+  cf["v2xpe_exlsocgr", "Estimate"] <- -cf["v2xpe_exlsocgr", "Estimate"]
+  # Step 1: Extract the coeftable from fepois model
+  cf <- models$Inclusion$coeftable
+  
+  
+  modelsummary::msummary(
+    models,
+    coef_map    = ordered_labels_fe,
+    coef_order  = names(ordered_labels_fe),
+    stars       = c('***' = .01, '**' = .05, '†' = .1),
+    add_rows    = custom_fe_rows,
+    gof_omit    = 'FE:|IC|Log.Lik|Std.Errors|AIC|BIC|Deviance|R2',
+    statistic   = "conf.int",
+    exponentiate = TRUE,  # ✅ THIS IS THE KEY LINE
+    output      = paste0(tables_path, "regression_table_FE.tex"),
+    title       = "Poisson Fixed Effects Models (IRR)"
+  )
 }
+
+
+if(FE){
+  # Variables to plot, in the same order as ordered_labels
+  plot_vars <- c(
+    "dfo_severity", "duration", "nevents_sum10", "population_affected", 
+    "hdi_l1", "wdi_gdppc", 
+    "e_wbgi_vae", "v2xpe_exlsocgr", "e_wbgi_gee", "v2x_rule", "decay_brds_c", "brd_12mb"
+  )
+  
+  # Custom display order for y-axis (top to bottom in plot)
+  ordered_labels <- c(
+    "Accountability",
+    "Inclusion",
+    "Gov. effectiveness",
+    "Rule of law",
+    "Conflict history",
+    "Local conflict",
+    "Exposed population",
+    "Flood severity",
+    "Flood duration",
+    "Past flood events",
+    "Local HDI",
+    "National GDP per capita"
+  )
+  
+  
+  
+  # Mapping from model names to variable added in that model
+  added_vars <- c(
+    Accountability = "e_wbgi_vae",
+    Inclusion = "v2xpe_exlsocgr",
+    "Gov. effectiveness" = "e_wbgi_gee",
+    "Rule of law" = "v2x_rule",
+    "Conflict history" = "decay_brds_c",
+    "Local conflict" = "brd_12mb"
+  )
+  
+  # Baseline variables (present in Baseline model)
+  v_baseline <- c(
+    "dfo_severity", "duration", "nevents_sum10", "population_affected", "rugged", "hdi_l1", "wdi_gdppc", "tropical_flood"
+  )
+  
+  # Ordered pretty labels for y axis
+  custom_labels <- c(
+    population_affected = "Exposed population",
+    dfo_severity = "Flood severity",
+    duration = "Flood duration",
+    nevents_sum10 = "Past flood events",
+    hdi_l1 = "Local HDI",
+    wdi_gdppc = "National GDP per capita",
+    e_wbgi_vae = "Accountability",
+    v2xpe_exlsocgr = "Inclusion",
+    e_wbgi_gee = "Gov. effectiveness",
+    v2x_rule = "Rule of law",
+    decay_brds_c = "Conflict history",
+    brd_12mb = "Local conflict"
+  )
+  # Stack all model coefs, add model name and original variable
+  coefs <- purrr::map2_dfr(models, names(models), ~
+  broom::tidy(.x) %>%
+    mutate(model = .y, varname = term)
+)
+
+  coefs_plot <- coefs %>%
+  filter(
+    (model == "Baseline" & varname %in% v_baseline) |
+      (model != "Baseline" & varname == added_vars[model])
+  ) %>%
+  mutate(
+    term_label = custom_labels[varname],
+    color_var = varname,
+    
+    # Use raw log-coefficient for confidence interval
+    estimate_log = estimate,
+    estimate = exp(estimate_log),
+    ymin = exp(estimate_log - 1.96 * std.error),
+    ymax = exp(estimate_log + 1.96 * std.error)
+  )
+
+
+  # Ensure correct factor order for the y axis
+  coefs_plot$term_label <- factor(coefs_plot$term_label, levels = rev(ordered_labels))
+  
+  ggplot(coefs_plot, aes(x = term_label, y = estimate, color = color_var)) +
+    geom_point(size = 3) +
+    labs(shape = "Clipped CI") +
+    geom_errorbar(aes(ymin = ymin, ymax = ymax), width = 0.15) +
+    scale_y_log10(
+      breaks = c(0.0001, 0.001, 0.01, 0.1, 1, 10, 100, 1000),
+      labels = c("0.0001", "0.001", "0.01", "0.1", "1", "10", "100", "1000")
+    ) +
+    geom_hline(yintercept = 1, linetype = "dashed", color = "gray40") +
+    scale_color_manual(values = colors, guide = "none") +
+    coord_flip() +
+    labs(
+      x = NULL,
+      y = "Incidence rate ratio" # Or "Incidence rate ratio (exp(coef))" if you want to plot exp(estimate)
+    ) +
+    theme_minimal(base_family = "Arial") +
+    theme(
+      axis.title = element_text(size = 16, color = "black"),
+      axis.text = element_text(size = 14, color = "black"),
+      plot.title = element_text(size = 16, face = "bold"),
+      panel.grid.minor = element_blank(),
+      plot.background = element_rect(fill = "white", color = "white"),
+      panel.background = element_rect(fill = "white", color = "white")
+    )
+  ggsave(filename = paste0(plots_path, "coef_plot_FE.png"), dpi = 350)
+}
+
+#Diagnostics
+
+#Fig S6b
+
+if(GDP) {diagnostics <- summary(fit_baseline)
+print(diagnostics)
+
+print(round(diagnostics$fixed %>% dplyr::select(Rhat, Bulk_ESS, Tail_ESS), 0))}
+
 
 
 ####CONDITIONAL EFFECTs###########
@@ -621,7 +1018,7 @@ if(NOGDP && TRAIN_MODELS){tab_model(fit_baseline,
 
 set.seed(SEEDNUM)
 
-if(AGG | ECONTEST) {print('skip!')
+if(AGG | ECONTEST | FE) {print('skip!')
 } else{
   #posterior epred
   cfx_pred_accountability <- conditional_effects(fit_df$fits$Accountability, method = "posterior_epred", plot = FALSE, prob = 0.8) %>% plot(plot = FALSE)
@@ -630,7 +1027,7 @@ if(AGG | ECONTEST) {print('skip!')
   cfx_pred_ruleoflaw <- conditional_effects(fit_df$fits$`Rule of law`, method = "posterior_epred", plot = FALSE, prob = 0.8) %>% plot(plot = FALSE)
   cfx_pred_conflict_country <- conditional_effects(fit_df$fits$`Conflict history`, method = "posterior_epred", plot = FALSE, prob = 0.8) %>% plot(plot = FALSE)
   if(NOLOC){print("No local conflict!")}else {cfx_pred_conflict_sub <- conditional_effects(fit_df$fits$`Local conflict`, method = "posterior_epred", plot = FALSE, prob = 0.8) %>% plot(plot = FALSE)}
-  cfx_pred_poly <- conditional_effects(fit_df$fits$`Electoral democracy`, method = "posterior_epred", plot = FALSE, prob = 0.8) %>% plot(plot = FALSE)
+  if(GDP) {cfx_pred_poly <- conditional_effects(fit_df$fits$`Electoral democracy`, method = "posterior_epred", plot = FALSE, prob = 0.8) %>% plot(plot = FALSE)}else{print("No Poly!")}
   cfx_pred_baseline <- conditional_effects(fit_df$fits$Baseline, method = "posterior_epred", plot = FALSE, prob = 0.8) %>% plot(plot = FALSE)
   
   
@@ -645,21 +1042,6 @@ if(AGG | ECONTEST) {print('skip!')
   # Replace 'your_data' with your actual data frame or object containing plot data
   common_y_limits <- c(0, max_y_conflict)
   
-  colors <- c('e_wbgi_vae' = "#8eade8",
-              'v2xpe_exlsocgr' =  "#3c61a3", 
-              'e_wbgi_gee' = "#f2aed8",
-              'v2x_rule' = "#c556d1",
-              'decay_brds_c' = "#f5b342",
-              'brd_12mb' =  "#f0843c",
-              'v2x_polyarchy' = "#5df0e1",
-              'population_affected' = "#CCCCCC",
-              'dfo_severity' = "#CCCCCC",
-              'duration' = "#CCCCCC",
-              'nevents_sum10' = "#CCCCCC",
-              'rugged' = "#CCCCCC", 
-              'tropical_flood' = "#CCCCCC",
-              "wdi_gdppc" = "#CCCCCC",
-              "hdi_l1"= "#CCCCCC")
   
   
   #Function to get range of x variable
@@ -678,8 +1060,8 @@ if(AGG | ECONTEST) {print('skip!')
       geom_ribbon(aes(x = !!sym(x_variable), y = estimate__, ymin = lower__, ymax = upper__), fill = color) +
       geom_line(aes(x = !!sym(x_variable), y = estimate__), color = "black", size = 0.8) +
       labs(x = x_label, y = "Flood mortality") +
-      xlim(x_range) + 
-      ylim(common_y_limits) +
+      xlim(x_range) +
+      coord_cartesian(ylim = common_y_limits) +  # Use this instead of ylim()
       theme_minimal() +
       theme(
         axis.line = element_line(), 
@@ -699,7 +1081,33 @@ if(AGG | ECONTEST) {print('skip!')
   
   # List of variables with corresponding data
   
-  if(GDP | INTER){variables <- list(
+  if(NOGDP){variables <- list(
+    `e_wbgi_vae` = cfx_pred_accountability$e_wbgi_vae[[1]],
+    `v2xpe_exlsocgr` = cfx_pred_inclusion$v2xpe_exlsocgr[[1]],
+    `e_wbgi_gee` = cfx_pred_goveff$e_wbgi_gee[[1]],
+    `v2x_rule` = cfx_pred_ruleoflaw$v2x_rule[[1]],
+    `decay_brds_c` = cfx_pred_conflict_country$decay_brds_c[[1]],
+    `brd_12mb` = cfx_pred_conflict_sub$brd_12mb[[1]],
+    `v2x_polyarchy` = cfx_pred_poly$v2x_polyarchy[[1]],
+    `population_affected` = cfx_pred_baseline$population_affected[[1]],
+    `dfo_severity` = cfx_pred_baseline$dfo_severity[[1]],
+    `duration` = cfx_pred_baseline$duration[[1]],
+    `nevents_sum10` = cfx_pred_baseline$nevents_sum10[[1]],
+    `rugged` = cfx_pred_baseline$rugged[[1]],
+    `tropical_flood` = cfx_pred_baseline$tropical_flood[[1]]
+  )}else if (NOLOC) {variables <- list(
+    `e_wbgi_vae` = cfx_pred_accountability$e_wbgi_vae[[1]],
+    `v2xpe_exlsocgr` = cfx_pred_inclusion$v2xpe_exlsocgr[[1]],
+    `e_wbgi_gee` = cfx_pred_goveff$e_wbgi_gee[[1]],
+    `v2x_rule` = cfx_pred_ruleoflaw$v2x_rule[[1]],
+    `decay_brds_c` = cfx_pred_conflict_country$decay_brds_c[[1]],
+    `population_affected` = cfx_pred_baseline$population_affected[[1]],
+    `dfo_severity` = cfx_pred_baseline$dfo_severity[[1]],
+    `duration` = cfx_pred_baseline$duration[[1]],
+    `nevents_sum10` = cfx_pred_baseline$nevents_sum10[[1]],
+    `rugged` = cfx_pred_baseline$rugged[[1]],
+    `tropical_flood` = cfx_pred_baseline$tropical_flood[[1]]
+  )}else if(GDP){variables <- list(
     `e_wbgi_vae` = cfx_pred_accountability$e_wbgi_vae[[1]],
     `v2xpe_exlsocgr` = cfx_pred_inclusion$v2xpe_exlsocgr[[1]],
     `e_wbgi_gee` = cfx_pred_goveff$e_wbgi_gee[[1]],
@@ -715,19 +1123,6 @@ if(AGG | ECONTEST) {print('skip!')
     `tropical_flood` = cfx_pred_baseline$tropical_flood[[1]],
     `wdi_gdppc` = cfx_pred_baseline$wdi_gdppc[[1]],
     `hdi_l1` = cfx_pred_baseline$hdi_l1[[1]]
-  )}else if (NOLOC) {variables <- list(
-    `e_wbgi_vae` = cfx_pred_accountability$e_wbgi_vae[[1]],
-    `v2xpe_exlsocgr` = cfx_pred_inclusion$v2xpe_exlsocgr[[1]],
-    `e_wbgi_gee` = cfx_pred_goveff$e_wbgi_gee[[1]],
-    `v2x_rule` = cfx_pred_ruleoflaw$v2x_rule[[1]],
-    `decay_brds_c` = cfx_pred_conflict_country$decay_brds_c[[1]],
-    `v2x_polyarchy` = cfx_pred_poly$v2x_polyarchy[[1]],
-    `population_affected` = cfx_pred_baseline$population_affected[[1]],
-    `dfo_severity` = cfx_pred_baseline$dfo_severity[[1]],
-    `duration` = cfx_pred_baseline$duration[[1]],
-    `nevents_sum10` = cfx_pred_baseline$nevents_sum10[[1]],
-    `rugged` = cfx_pred_baseline$rugged[[1]],
-    `tropical_flood` = cfx_pred_baseline$tropical_flood[[1]]
   )} else {variables <- list(
     `e_wbgi_vae` = cfx_pred_accountability$e_wbgi_vae[[1]],
     `v2xpe_exlsocgr` = cfx_pred_inclusion$v2xpe_exlsocgr[[1]],
@@ -735,17 +1130,46 @@ if(AGG | ECONTEST) {print('skip!')
     `v2x_rule` = cfx_pred_ruleoflaw$v2x_rule[[1]],
     `decay_brds_c` = cfx_pred_conflict_country$decay_brds_c[[1]],
     `brd_12mb` = cfx_pred_conflict_sub$brd_12mb[[1]],
-    `v2x_polyarchy` = cfx_pred_poly$v2x_polyarchy[[1]],
     `population_affected` = cfx_pred_baseline$population_affected[[1]],
     `dfo_severity` = cfx_pred_baseline$dfo_severity[[1]],
     `duration` = cfx_pred_baseline$duration[[1]],
     `nevents_sum10` = cfx_pred_baseline$nevents_sum10[[1]],
     `rugged` = cfx_pred_baseline$rugged[[1]],
-    `tropical_flood` = cfx_pred_baseline$tropical_flood[[1]]
+    `tropical_flood` = cfx_pred_baseline$tropical_flood[[1]],
+    `wdi_gdppc` = cfx_pred_baseline$wdi_gdppc[[1]],
+    `hdi_l1` = cfx_pred_baseline$hdi_l1[[1]]
   )} 
   
   
-  if(GDP | INTER){labels <- c(
+  if(NOGDP){labels <- c(
+    e_wbgi_vae = "Accountability",
+    v2xpe_exlsocgr = "Inclusion",
+    e_wbgi_gee = "Gov. effectiveness",
+    v2x_rule = "Rule of law",
+    decay_brds_c = "Conflict history",
+    brd_12mb = "Local conflict",
+    v2x_polyarchy = "Electoral democracy",
+    population_affected = "Exposed population",
+    dfo_severity = "Flood severity",
+    duration = "Flood duration",
+    nevents_sum10 = "Past flood events",
+    rugged = "Rugged terrain",
+    tropical_flood = "Tropical flood"
+  )
+  }else if(NOLOC) {labels <- c(
+    e_wbgi_vae = "Accountability",
+    v2xpe_exlsocgr = "Inclusion",
+    e_wbgi_gee = "Gov. effectiveness",
+    v2x_rule = "Rule of law",
+    decay_brds_c = "Conflict history",
+    population_affected = "Exposed population",
+    dfo_severity = "Flood severity",
+    duration = "Flood duration",
+    nevents_sum10 = "Past flood events",
+    rugged = "Rugged terrain",
+    tropical_flood = "Tropical flood"
+  )
+  }else if(GDP) {labels <- c(
     e_wbgi_vae = "Accountability",
     v2xpe_exlsocgr = "Inclusion",
     e_wbgi_gee = "Gov. effectiveness",
@@ -762,37 +1186,23 @@ if(AGG | ECONTEST) {print('skip!')
     wdi_gdppc = "National GDP per capita",
     hdi_l1 = "Local HDI"
   )
-  }else if(NOLOC) {labels <- c(
+  }else{labels <- c(
     e_wbgi_vae = "Accountability",
     v2xpe_exlsocgr = "Inclusion",
     e_wbgi_gee = "Gov. effectiveness",
     v2x_rule = "Rule of law",
     decay_brds_c = "Conflict history",
-    v2x_polyarchy = "Electoral democracy",
+    brd_12mb = "Local conflict",
     population_affected = "Exposed population",
     dfo_severity = "Flood severity",
     duration = "Flood duration",
     nevents_sum10 = "Past flood events",
     rugged = "Rugged terrain",
-    tropical_flood = "Tropical flood"
+    tropical_flood = "Tropical flood",
+    wdi_gdppc = "National GDP per capita",
+    hdi_l1 = "Local HDI"
   )
-  }else{
-    labels <- c(
-      e_wbgi_vae = "Accountability",
-      v2xpe_exlsocgr = "Inclusion",
-      e_wbgi_gee = "Gov. effectiveness",
-      v2x_rule = "Rule of law",
-      decay_brds_c = "Conflict history",
-      brd_12mb = "Local conflict",
-      v2x_polyarchy = "Electoral democracy",
-      population_affected = "Exposed population",
-      dfo_severity = "Flood severity",
-      duration = "Flood duration",
-      nevents_sum10 = "Past flood events",
-      rugged = "Rugged terrain",
-      tropical_flood = "Tropical flood"
-    )
-  } 
+  }
   
   # Loop to generate plots for each variable
   all_plots <- list()
@@ -835,67 +1245,64 @@ if(AGG | ECONTEST) {print('skip!')
   
   if (NOLOC) {
     combined_plot_all <- wrap_plots(all_plots$e_wbgi_vae,  all_plots$e_wbgi_gee, all_plots$decay_brds_c, 
-                          all_plots$v2xpe_exlsocgr, all_plots$v2x_rule, all_plots$population_affected,
-                          all_plots$dfo_severity, all_plots$duration, all_plots$nevents_sum10,
-                          all_plots$rugged, all_plots$tropical_flood, ncol = 3)  # Define the layout with 3 columns
-  }else{
+                                    all_plots$v2xpe_exlsocgr, all_plots$v2x_rule, all_plots$population_affected,
+                                    all_plots$dfo_severity, all_plots$duration, all_plots$nevents_sum10,
+                                    all_plots$rugged, all_plots$tropical_flood, ncol = 3)  # Define the layout with 3 columns
+  }else if(GDP) {
     combined_plot_all <- wrap_plots(
       all_plots$e_wbgi_vae, all_plots$e_wbgi_gee, all_plots$decay_brds_c,
       all_plots$v2xpe_exlsocgr, all_plots$v2x_rule, all_plots$brd_12mb,
       all_plots$v2x_polyarchy,
       ncol = 3)
+  }else{
+    combined_plot_all <- wrap_plots(
+      all_plots$e_wbgi_vae, all_plots$e_wbgi_gee, all_plots$decay_brds_c,
+      all_plots$v2xpe_exlsocgr, all_plots$v2x_rule, all_plots$brd_12mb,
+      ncol = 3)
   }
   print(combined_plot_all)
   
   
-  ggsave(filename = paste0(plots_path, "cfx-posterior-epred-80predint-poly-SI.png"), device = png, width = 5.6,  height = 4.6, scale = 2)
+  if(GDP){ggsave(filename = paste0(plots_path, "cfx-posterior-epred-80predint-poly-SI.png"), device = png, width = 5.6,  height = 4.6, scale = 2)}else{print("No Poly!")}
   
-  
-  # Display the combined plot
-  print(combined_plot)
-  
-  ggsave(filename = paste0(plots_path, "cfx-posterior-epred-80predint.png"), device = png, width = 5.6,  height = 3.6, scale = 2)
-  
-  if(GDP | INTER){
+  if(NOGDP){
     combined_plot_all <- wrap_plots(all_plots$e_wbgi_vae, all_plots$e_wbgi_gee, all_plots$decay_brds_c,
-      all_plots$v2xpe_exlsocgr, all_plots$v2x_rule, all_plots$brd_12mb,
-      all_plots$population_affected, all_plots$dfo_severity, all_plots$duration,
-      all_plots$nevents_sum10,all_plots$rugged, all_plots$tropical_flood,
-      all_plots$wdi_gdppc, all_plots$hdi_l1, ncol = 3)   # Define the layout with 3 columns
-  }else if (NOLOC) {
-    combined_plot_all <- wrap_plots(all_plots$e_wbgi_vae,all_plots$e_wbgi_gee,all_plots$decay_brds_c, 
-                          all_plots$v2xpe_exlsocgr,all_plots$v2x_rule, all_plots$population_affected, 
-                          all_plots$dfo_severity, all_plots$duration, all_plots$nevents_sum10,
-                          all_plots$rugged,all_plots$tropical_flood, ncol = 3)  # Define the layout with 3 columns
-  }else{
-    # Combine plots with annotations (letters)
-    
-    tag_labels <- c("a)", "b)", "c)", "d)", "e)", "f)", "g)", "h)", "i)", "j)", "k)", "l)")
-    combined_plot_all <- wrap_plots(
-      all_plots$e_wbgi_vae, all_plots$e_wbgi_gee, all_plots$decay_brds_c,
-      all_plots$v2xpe_exlsocgr, all_plots$v2x_rule, all_plots$brd_12mb,
-      all_plots$population_affected, all_plots$dfo_severity, all_plots$duration,
-      all_plots$nevents_sum10, all_plots$rugged, all_plots$tropical_flood,
-      ncol = 3
-    ) + 
-      plot_annotation(tag_levels = list(tag_labels))  # Manually add a), b), etc.
-    
-    # Optional: Adjust the positioning or size of the tags
-    combined_plot_all <- combined_plot_all & theme(
-      plot.tag.position = c(0.01, 1),  # Adjusts the position of the tags, move right with the first value
-      plot.tag = element_text(size = 14, face = 'bold', hjust = 0, vjust = -0.3),  # Adjusts alignment
-      plot.margin = unit(c(0.3, 0.3, 0.3, 0.3), "cm")  # Add more space at the top (first value is for top margin)
-    )
-    
-    } 
+                                    all_plots$v2xpe_exlsocgr, all_plots$v2x_rule, all_plots$brd_12mb,
+                                    all_plots$population_affected, all_plots$dfo_severity, all_plots$duration,
+                                    all_plots$nevents_sum10, all_plots$rugged, all_plots$tropical_flood, 
+                                    ncol = 3) }else if (NOLOC) {
+                                      combined_plot_all <- wrap_plots(all_plots$e_wbgi_vae,all_plots$e_wbgi_gee,all_plots$decay_brds_c, 
+                                                                      all_plots$v2xpe_exlsocgr,all_plots$v2x_rule, all_plots$population_affected, 
+                                                                      all_plots$dfo_severity, all_plots$duration, all_plots$nevents_sum10,
+                                                                      all_plots$rugged,all_plots$tropical_flood, ncol = 3)  # Define the layout with 3 columns
+                                    }else{
+                                      # Combine plots with annotations (letters)
+                                      
+                                      tag_labels <- c("a)", "b)", "c)", "d)", "e)", "f)", "g)", "h)", "i)", "j)", "k)", "l)", "m)", "n)")
+                                      combined_plot_all <- wrap_plots(all_plots$e_wbgi_vae, all_plots$e_wbgi_gee, all_plots$decay_brds_c,
+                                                                      all_plots$v2xpe_exlsocgr, all_plots$v2x_rule, all_plots$brd_12mb,
+                                                                      all_plots$population_affected, all_plots$dfo_severity, all_plots$duration,
+                                                                      all_plots$nevents_sum10, all_plots$rugged, all_plots$tropical_flood,
+                                                                      all_plots$wdi_gdppc, all_plots$hdi_l1, ncol = 3) + 
+                                        plot_annotation(tag_levels = list(tag_labels))  
+                                      
+                                      # Optional: Adjust the positioning or size of the tags
+                                      combined_plot_all <- combined_plot_all & theme(
+                                        plot.tag.position = c(0.01, 0.01),  # Adjusts the position of the tags, move right with the first value
+                                        plot.tag = element_text(size = 14, face = 'bold', hjust = 0, vjust = 0),  # Adjusts alignment
+                                        plot.margin = unit(c(0.3, 0.3, 0.3, 0.5), "cm")  # Add more space at the top (first value is for top margin)
+                                      )
+                                      
+                                    } 
   
   
   print(combined_plot_all)
   # Save the combined plot with annotations
   ggsave(filename = paste0(plots_path, "Fig3.png"), plot = combined_plot_all, device = png, width = 5.6,  height = 4.6, scale = 2, dpi = 350)
   
-
+  
 }
+
 
 
 
@@ -910,30 +1317,30 @@ if(AGG){
     models$`Electoral democracy`
   )
 } else if (ECONTEST){
-    mw_res <- model_weights(
-      models$`Baseline w GDP`, 
-      models$`Baseline w/o GDP`, 
-      models$`Baseline w/o GDP + conflict`
-    )} else if(NOLOC) {
   mw_res <- model_weights(
-    models$Baseline,
-    models$`Conflict history`,
-    models$Accountability,
-    models$`Gov. effectiveness`,
-    models$Inclusion,
-    models$`Rule of law`
-  )
-} else {
-mw_res <- model_weights(
-  models$Baseline,
-  models$`Conflict history`,
-  models$`Local conflict`,
-  models$Accountability,
-  models$`Gov. effectiveness`,
-  models$Inclusion,
-  models$`Rule of law`
-)
-}
+    models$`Baseline w GDP`, 
+    models$`Baseline w/o GDP`, 
+    models$`Baseline w/o GDP + conflict`
+  )} else if(NOLOC) {
+    mw_res <- model_weights(
+      models$Baseline,
+      models$`Conflict history`,
+      models$Accountability,
+      models$`Gov. effectiveness`,
+      models$Inclusion,
+      models$`Rule of law`
+    )
+  } else {
+    mw_res <- model_weights(
+      models$Baseline,
+      models$`Conflict history`,
+      models$`Local conflict`,
+      models$Accountability,
+      models$`Gov. effectiveness`,
+      models$Inclusion,
+      models$`Rule of law`
+    )
+  }
 names(mw_res) <- gsub("models\\$", "", names(mw_res))  # Remove 'models$'
 names(mw_res) <- gsub("`", "", names(mw_res))          # Remove backticks
 
@@ -957,7 +1364,7 @@ if(AGG){
     models$`Baseline w/o GDP + conflict`,
     newdata = test, 
     allow_new_levels = TRUE)
-  } else if(NOLOC) {
+} else if(NOLOC) {
   mw_res_oos <- model_weights(
     models$Baseline,
     models$`Conflict history`,
@@ -968,7 +1375,7 @@ if(AGG){
     newdata = test, 
     allow_new_levels = TRUE
   )
-  } else {
+} else {
   mw_res_oos <- model_weights(
     models$Baseline,
     models$`Conflict history`,
@@ -1003,28 +1410,26 @@ if(AGG) {
     models$`Baseline w/o GDP`, 
     models$`Baseline w/o GDP + conflict`
   )}else if(NOLOC) {
-  loo_res <- loo(
-    models$Baseline,
-    models$`Conflict history`,
-    models$Accountability,
-    models$`Gov. effectiveness`,
-    models$Inclusion,
-    models$`Rule of law`
-  )
-} else {
-  loo_res <- loo(
-  models$Baseline,
-  models$`Conflict history`,
-  models$`Local conflict`,
-  models$Accountability,
-  models$`Gov. effectiveness`,
-  models$Inclusion,
-  models$`Rule of law`
-)
-}
+    loo_res <- loo(
+      models$Baseline,
+      models$`Conflict history`,
+      models$Accountability,
+      models$`Gov. effectiveness`,
+      models$Inclusion,
+      models$`Rule of law`
+    )
+  } else {
+    loo_res <- loo(
+      models$Baseline,
+      models$`Conflict history`,
+      models$`Local conflict`,
+      models$Accountability,
+      models$`Gov. effectiveness`,
+      models$Inclusion,
+      models$`Rule of law`
+    )
+  }
 
-#Fig S6c
-if(NOGDP){print(loo(fit_baseline))}
 
 # Match the rownames of the diffs in the LOO object to the model names
 
@@ -1038,38 +1443,37 @@ if(AGG) {
     models$`Electoral democracy`,
     newdata = test,
     allow_new_levels = TRUE
-) } else if (ECONTEST){
-  loo_res_oos <- loo(
-    models$`Baseline w GDP`, 
-    models$`Baseline w/o GDP`, 
-    models$`Baseline w/o GDP + conflict`,
-    newdata = test, 
-    allow_new_levels = TRUE
-  )}else if(NOLOC) {
-  loo_res_oos <- loo(
-    models$Baseline,
-    models$`Conflict history`,
-    models$Accountability,
-    models$`Gov. effectiveness`,
-    models$Inclusion,
-    models$`Rule of law`,
-    newdata = test, 
-    allow_new_levels = TRUE
-  )
-}else {
-  loo_res_oos <- loo(
-    models$Baseline,
-    models$`Conflict history`,
-    models$`Local conflict`,
-    models$Accountability,
-    models$`Gov. effectiveness`,
-    models$Inclusion,
-    models$`Rule of law`,
-    newdata = test, 
-    allow_new_levels = TRUE
-  )
-}
-
+  ) } else if (ECONTEST){
+    loo_res_oos <- loo(
+      models$`Baseline w GDP`, 
+      models$`Baseline w/o GDP`, 
+      models$`Baseline w/o GDP + conflict`,
+      newdata = test, 
+      allow_new_levels = TRUE
+    )}else if(NOLOC) {
+      loo_res_oos <- loo(
+        models$Baseline,
+        models$`Conflict history`,
+        models$Accountability,
+        models$`Gov. effectiveness`,
+        models$Inclusion,
+        models$`Rule of law`,
+        newdata = test, 
+        allow_new_levels = TRUE
+      )
+    }else {
+      loo_res_oos <- loo(
+        models$Baseline,
+        models$`Conflict history`,
+        models$`Local conflict`,
+        models$Accountability,
+        models$`Gov. effectiveness`,
+        models$Inclusion,
+        models$`Rule of law`,
+        newdata = test, 
+        allow_new_levels = TRUE
+      )
+    }
 
 
 # Match the rownames of the diffs in the LOO object to the model names for out-of-sample
@@ -1096,13 +1500,13 @@ predictive_performance_table_oos <- loo_res_oos$diffs %>% as_tibble(rownames = "
 
 
 # Add "c)" as a custom title aligned with the first column (mname)
-gt_table <- gt(left_join(predictive_performance_table, predictive_performance_table_oos, by = "mname")) %>%
+if(SPLIT){gt_table <- gt(left_join(predictive_performance_table, predictive_performance_table_oos, by = "mname")) %>%
   tab_header(
     title = md("**c)**")  # Adds "c)" at the top and aligns it to the left
   ) %>%
-  tab_spanner(label = "In-sample (2000-2014)", 
+  tab_spanner(label = "In-sample", 
               columns = c("elpd_loo", "elpd_diff", "stacking_weight")) %>%
-  tab_spanner(label = "Out-of-sample (2015-2018)",
+  tab_spanner(label = "Out-of-sample",
               columns = c("elpd_loo_oos", "elpd_diff_oos", "stacking_weight_oos")) %>%
   cols_label(mname = "Model",
              elpd_loo = "elpd LOO",
@@ -1131,7 +1535,43 @@ gt_table <- gt(left_join(predictive_performance_table, predictive_performance_ta
     locations = cells_column_labels(columns = c(elpd_loo_oos))
   ) %>%
   gtsave(paste0(plots_path, "/Fig4c.html")) 
-
+}else{
+  gt_table <- gt(left_join(predictive_performance_table, predictive_performance_table_oos, by = "mname")) %>%
+    tab_header(
+      title = md("**c)**")  # Adds "c)" at the top and aligns it to the left
+    ) %>%
+    tab_spanner(label = "In-sample (2000-2014)", 
+                columns = c("elpd_loo", "elpd_diff", "stacking_weight")) %>%
+    tab_spanner(label = "Out-of-sample (2015-2018)",
+                columns = c("elpd_loo_oos", "elpd_diff_oos", "stacking_weight_oos")) %>%
+    cols_label(mname = "Model",
+               elpd_loo = "elpd LOO",
+               elpd_diff = html("&Delta;elpd"),
+               stacking_weight = "stacking weight",
+               elpd_loo_oos = "elpd LOO",
+               elpd_diff_oos = html("&Delta;elpd"),
+               stacking_weight_oos = "stacking weight") %>%
+    tab_options(
+      table.font.names = 'Arial', 
+      table.font.color = "black",
+      heading.align = "left",  # Align header (c)) to the left
+      table.border.top.width = px(0),  # Remove the top border (grey line)
+      table.border.top.color = "white"  # Set the top border color to white (invisible)
+    ) %>%
+    tab_style(
+      style = list(
+        cell_borders(sides = "left", color = "lightgray", weight = px(2))
+      ),
+      locations = cells_body(columns = c(elpd_loo_oos))
+    ) %>%
+    tab_style(
+      style = list(
+        cell_borders(sides = "left", color = "lightgray", weight = px(2))
+      ),
+      locations = cells_column_labels(columns = c(elpd_loo_oos))
+    ) %>%
+    gtsave(paste0(plots_path, "/Fig4c.html"))
+}
 
 # Convert the HTML to a PNG with higher DPI (e.g., 400 DPI)
 webshot(
@@ -1179,15 +1619,15 @@ weights_table <- left_join(predictive_performance_table, predictive_performance_
 
 names(weights_table) <- c("Model", "In-sample", "Out-of-sample")
 weights_table$Model <- factor(weights_table$Model)
-                   
-                          
+
+
 
 if(AGG){
   model_colors <- c('Democracy' = "#8eade8",
-                  'Institutional quality' =  "#f2aed8",
-                  'Electoral democracy' = "#5df0e1",
-                  'Conflict' = "#f5b342",
-                  'Baseline' = "#CCCCCC") 
+                    'Institutional quality' =  "#f2aed8",
+                    'Electoral democracy' = "#5df0e1",
+                    'Conflict' = "#f5b342",
+                    'Baseline' = "#CCCCCC") 
 } else if (ECONTEST) {
   model_colors <- c('Baseline w GDP' = "#CCCCCC",
                     'Baseline w/o GDP' = "#1F60F1",
@@ -1203,36 +1643,36 @@ if(AGG){
   
 } else {
   model_colors <- c('Accountability' = "#8eade8",
-    'Inclusion' =  "#3c61a3"  ,
-    'Gov. effectiveness' = "#f2aed8",
-    'Rule of law' = "#c556d1",
-    'Conflict history' =  "#f5b342" ,
-    'Local conflict' = "#f0843c",
-    'Electoral democracy' = "#5df0e1",
-    'Baseline' = "#CCCCCC")
-
+                    'Inclusion' =  "#3c61a3"  ,
+                    'Gov. effectiveness' = "#f2aed8",
+                    'Rule of law' = "#c556d1",
+                    'Conflict history' =  "#f5b342" ,
+                    'Local conflict' = "#f0843c",
+                    'Electoral democracy' = "#5df0e1",
+                    'Baseline' = "#CCCCCC")
+  
 }
 
 if(AGG){
   legend_order <- c("Democracy",
-    "Institutional quality",
-    "Conflict",
-    "Electoral democracy",
-    "Baseline") 
-  }else if (ECONTEST) { legend_order <- 
-    c('Baseline w GDP',
-      'Baseline w/o GDP',
-      'Baseline w/o GDP + conflict'
-    )
-    }else if(NOLOC){
-    legend_order <- c(
-      "Accountability",
-      "Inclusion",
-      "Gov. effectiveness",
-      "Rule of law",
-      "Conflict history",
-      "Baseline")
-  }else{
+                    "Institutional quality",
+                    "Conflict",
+                    "Electoral democracy",
+                    "Baseline") 
+}else if (ECONTEST) { legend_order <- 
+  c('Baseline w GDP',
+    'Baseline w/o GDP',
+    'Baseline w/o GDP + conflict'
+  )
+}else if(NOLOC){
+  legend_order <- c(
+    "Accountability",
+    "Inclusion",
+    "Gov. effectiveness",
+    "Rule of law",
+    "Conflict history",
+    "Baseline")
+}else{
   legend_order <- c(
     "Accountability",
     "Inclusion",
@@ -1241,13 +1681,13 @@ if(AGG){
     "Conflict history",
     "Local conflict",
     "Baseline")
-    }
+}
 
 
 
 long_data <- pivot_longer(weights_table, cols = c(`In-sample`, `Out-of-sample`), 
-                                       names_to = "Sample_Type", 
-                                       values_to = "Score")
+                          names_to = "Sample_Type", 
+                          values_to = "Score")
 
 long_data <- long_data %>%
   group_by(Sample_Type) %>%
@@ -1313,10 +1753,10 @@ weight_plot <- ggdraw() +
   draw_label("b)", x = 0.01, y = 0.98, hjust = 0, vjust = 1, size = 15, fontface = "bold", font = 'Arial')
 
 if(ECONTEST){
-  ggsave(paste0(plots_path, "predictive_performance_stacking_weights.png"), plot = weights_plot, width = 6.8, height = 4, dpi = 300)
-  }else{
-    ggsave(paste0(plots_path, "Fig4b.png"), plot = weight_plot, width = 6.2, height = 3, dpi = 350)
-    }
+  ggsave(paste0(plots_path, "Fig4b.png"), plot = weight_plot, width = 7, height = 4, dpi = 350)
+}else{
+  ggsave(paste0(plots_path, "Fig4b.png"), plot = weight_plot, width = 6.2, height = 4, dpi = 350)
+}
 
 #Plot predictive performance table
 # Combine the relevant data into one data frame
@@ -1372,31 +1812,29 @@ elpd_plot <- ggdraw() +
   draw_label("a)", x = 0.015, y = 0.99, hjust = 0, vjust = 1, size = 15, fontface = "bold", font = 'Arial')
 
 if(ECONTEST){
-  ggsave(paste0(plots_path, "predictive_performance_stacking_weights.png"), plot = weights_plot, width = 6.8, height = 4, dpi = 300)
+ ggsave(paste0(plots_path, "Fig4a.png"), plot = elpd_plot,  width = 5, height = 4, dpi = 350)
 }else{
-  ggsave(paste0(plots_path, "Fig4a.png"), plot = elpd_plot, width = 3.8, height = 3, dpi = 350)
+  ggsave(paste0(plots_path, "Fig4a.png"), plot = elpd_plot,  width = 6.2, height = 4, dpi = 350)
 }
+
 
 
 ####COUNTERFACTUAL ANALYSIS####
 
-  
+if(!GDP){print("skip!")}else{
 #Predictive fit aggregated at global level ####
 
 #Take value of political indicators for New Zealand in 2018
 
-imputed <- read_rds("data/data_nolag.rds")
+nz <- readRDS("data/data_newzealand.Rds") 
 
-nz <-  imputed
-nz$inclusion <- (max(nz$v2xpe_exlsocgr) - nz$v2xpe_exlsocgr)
-
-nz <- subset(nz, (nz$year == 2018 & nz$gwcode == 920))
+nz$inclusion <- (max(test$v2xpe_exlsocgr) - nz$v2xpe_exlsocgr)
 
 
-nz$brd_12mb = 0
+#retrieve nz hdi value 
 
 pol <- c("brd_12mb","decay_brds_c","v2xpe_exlsocgr" ,"e_wbgi_vae", "e_wbgi_gee",         
-         "v2x_rule" , "v2x_polyarchy", "wdi_gdppc")
+         "v2x_rule" , "v2x_polyarchy", "wdi_gdppc", "hdi_l1") 
 
 #New Zealand vs test dataset comparison
 
@@ -1410,7 +1848,7 @@ percentiles <- c(0.5, 0.9, 0.95, 0.99)
 results <- list()
 
 pol2 <- c("inclusion" ,"e_wbgi_vae", "e_wbgi_gee",         
-          "v2x_rule" , "v2x_polyarchy", "wdi_gdppc")
+          "v2x_rule" , "v2x_polyarchy", "wdi_gdppc", "hdi_l1")
 
 # Loop through each variable and calculate the specified percentiles
 for(variable in pol2) {
@@ -1439,32 +1877,11 @@ df_nz <- df
 train_nz <- train
 test_nz <- test
 
-train_aa <- subset(train, (train$continent == "Africa" | train$continent == "Asia" ))
-train_aa_nz <- train_aa
-test_aa <- subset(test, (test$continent == "Africa" | test$continent == "Asia" ))
-test_aa_nz <- test_aa
-
-head(test_aa_nz$continent)
-
-train_conf <- subset(train, train$brd_12mb > 0)
-test_conf <- subset(test, test$brd_12mb > 0)
-train_conf_nz <- train_conf
-test_conf_nz <- test_conf
-df_conf <- subset(df, df$brd_12mb >0)
-df_conf_nz <- df_conf
-
-
 # Replace values in df_nz with values from nz for the year 2018 for the specified variables
 for (var in pol) {
   train_nz[, var] <- nz[, var]
   test_nz[, var] <- nz[, var]
   df_nz[, var] <- nz[, var]
-  train_aa_nz[, var] <- nz[, var]
-  test_aa_nz[, var] <- nz[, var]
-  df_conf_nz[, var] <- nz[,var]
-  train_conf_nz[, var] <- nz[, var]
-  test_conf_nz[, var] <- nz[,var]
-  
 }
 
 ###FIGURE
@@ -1582,7 +1999,7 @@ compute_summary_stats <- function(predictions, predictions_nz, model_name) {
   )
 }
 
-if(!NOGDP){print("skip!")}else{
+
   
   # Define model names and paths (make sure to replace these with actual paths)
   model_names <- c("Accountability", "Inclusion", "Gov. effectiveness", "Rule of law", "Conflict history", "Local conflict", "All pol. predictors")
@@ -1664,246 +2081,228 @@ if(!NOGDP){print("skip!")}else{
     vwidth = 1000,               # Set width to match the table (adjust this based on your table size)
     vheight = 600                # Set height to match the table (adjust this based on your table size)
   )
-
-
-###Ghana####
-
-gh <-  imputed
-gh$inclusion <- (max(gh$v2xpe_exlsocgr) - gh$v2xpe_exlsocgr)
-
-gh <- subset(gh, (gh$year == 2018 & gh$gwcode == 553))
-
-
-gh$brd_12mb = 0
-
-pol <- c("brd_12mb","decay_brds_c","v2xpe_exlsocgr" ,"e_wbgi_vae", "e_wbgi_gee",         
-         "v2x_rule" , "v2x_polyarchy", "wdi_gdppc")
-
-#Ghana vs full dataset comparison
-
-#reverse scale for inclusion
-test$inclusion <- (max(test$v2xpe_exlsocgr) - test$v2xpe_exlsocgr)
-
-# Percentiles to calculate
-percentiles <- c(0.5, 0.9, 0.95, 0.99)
-
-# Initialize a list to store results
-results <- list()
-
-pol2 <- c("inclusion" ,"e_wbgi_vae", "e_wbgi_gee",         
-          "v2x_rule" , "v2x_polyarchy",  "wdi_gdppc")
-
-# Loop through each variable and calculate the specified percentiles
-for(variable in pol2) {
-  # Extract the column data from the dataframe
-  column_data <- test[[variable]]
   
-  # Calculate the percentiles for the current variable
-  percentile_values <- quantile(column_data, percentiles, na.rm = TRUE)
   
-  # Store the results in the list
-  results[[variable]] <- percentile_values
-}
-
-# Print or return the results
-print(results)
-
-# Create a copy of df
-
-df_gh <- df
-train_gh <- train
-test_gh <- test
-
-train_aa <- subset(train, (train$continent == "Africa" | train$continent == "Asia" ))
-train_aa_gh <- train_aa
-test_aa <- subset(test, (test$continent == "Africa" | test$continent == "Asia" ))
-test_aa_gh <- test_aa
-
-head(test_aa_gh$continent)
-
-train_conf <- subset(train, train$brd_12mb > 0)
-test_conf <- subset(test, test$brd_12mb > 0)
-train_conf_gh <- train_conf
-test_conf_gh <- test_conf
-df_conf <- subset(df, df$brd_12mb >0)
-df_conf_gh <- df_conf
-
-
-# Replace values in df_gh with values from gh for the year 2018 for the specified variables
-for (var in pol) {
-  train_gh[, var] <- gh[, var]
-  test_gh[, var] <- gh[, var]
-  df_gh[, var] <- gh[, var]
-  train_aa_gh[, var] <- gh[, var]
-  test_aa_gh[, var] <- gh[, var]
-  df_conf_gh[, var] <- gh[,var]
-  train_conf_gh[, var] <- gh[, var]
-  test_conf_gh[, var] <- gh[,var]
   
-}
-
-###FIGURE
-
-x_limits90 = c(0,200)
-y_limits = NULL
-
-
-q10 <- function(y) quantile(y, 0.1)
-q90 <- function(y) quantile(y, 0.9)
-q25 <- function(y) quantile(y, 0.025)
-q975 <- function(y) quantile(y, 0.975)
-
-
-##############All political indicators################
-
-#load models
-fit_all <- readRDS("results/panel/aggregate/bayes_models/all_model.rds")
-
-data_all_test <- ppc_stat_data(y = test$dead_w, yrep = posterior_predict(fit_all, newdata = test, allow_new_levels = TRUE), stat = "q90")  
-data_all_gh_test <- ppc_stat_data(y = test_gh$dead_w, yrep = posterior_predict(fit_all, newdata = test_gh, allow_new_levels = TRUE), stat = "q90") 
-
-binwidth_defined <- 3 
-
-#Start the ggplot call
-p <- ggplot() + theme_minimal()
-
-
-#Function to plot histogram
-
-add_dataset_layers <- function(p, data, dataset_name, binwidth_defined) {
-  p + 
-    geom_histogram(data = filter(data, variable != "y"), #Assuming 'variable' is the correct column name
-                   aes(x = value, fill = dataset_name), 
-                   color = "black", linewidth = 0.25, na.rm = TRUE, 
-                   binwidth = binwidth_defined) # Apply alpha here
-}
-
-
-p <- add_dataset_layers(p, data_all_test, "All, actual", binwidth_defined)
-p <- add_dataset_layers(p, data_all_gh_test, "All, Ghana", binwidth_defined)
-
-p <- p + 
-  scale_fill_manual(values = c("All, actual" = alpha("#F44B3E", 0.7), 
-                               "All, Ghana" = alpha("#2596be", 0.7))) +
-  coord_cartesian(xlim = c(NA, 150)) # Limit x-axis range
-
-
-
-# Add labels and adjust theme
-p <- p + labs( x = "Flood deaths", y = "Predicted frequency") + 
-  theme(legend.title = element_blank(),
-        legend.position = "none",
-        plot.title = element_text(size = 14, color = "black", family="Arial", hjust = 0.5),
-        axis.text = element_text(size = 12, color = "black", family="Arial"),
-        legend.text = element_text(size = 12, color = "black", family="Arial"), 
-        axis.title =  element_text(size = 12, color = "black", family="Arial")
-        
-  )
-# Print the plot
-print(p)
-
-ggsave(paste0(plots_path, "all_counterfactual_outsample_Ghana.png"), height = 5, width = 5)
-
-
-###SINGLE MODELS; GLOBAL SAMPLE
-
-# Figure 5b
-
-# Function to load model and generate predictions
-generate_predictions <- function(model_path, test_data, test_gh_data, SEEDNUM) {
-  # Set the seed for reproducibility
-  set.seed(SEEDNUM)
   
-  fit <- readRDS(model_path)
-  predictions <- posterior_predict(fit, newdata = test, allow_new_levels = TRUE)
-  predictions_gh <- posterior_predict(fit, newdata = test_gh, allow_new_levels = TRUE)
-  list(predictions = predictions, predictions_gh = predictions_gh)
-}
-
-compute_summary_stats <- function(predictions, predictions_gh, model_name) {
-  # Calculate the means for each set of predictions
-  means_test <- colMeans(predictions)
-  means_test_gh <- colMeans(predictions_gh)
+  ###Ghana####
   
-  # Calculate the average of the means and round to 2 decimal places
-  avg_means_test <- round(mean(means_test), 2)
-  avg_means_test_gh <- round(mean(means_test_gh), 2)
+  gh <- df
   
-  # Calculate the percentage change and round to 2 decimal places
-  percentage_change <- round((avg_means_test_gh - avg_means_test) / avg_means_test * 100, 0)
   
-  # Calculate the range for the average predictions and round to 2 decimal places
-  min_avg_pred <- round(min(means_test) - min(means_test_gh), 2)
-  max_avg_pred <- round(max(means_test) - max(means_test_gh), 2)
+  gh <- subset(gh, (gh$year == 2018 & gh$country_name == "Ghana"))
+  gh$inclusion <- (max(test$v2xpe_exlsocgr) - gh$v2xpe_exlsocgr)
   
-  min_avg_pred<- format(min_avg_pred, big.mark=",",scientific=FALSE)
-  max_avg_pred <- format(max_avg_pred, big.mark=",",scientific=FALSE)
+  gh$brd_12mb = 0
   
-  # Return a data frame with the summary statistics
-  data.frame(
-    Model = model_name,
-    Avg_Pred_Test = avg_means_test,
-    Avg_Pred_Test_gh = avg_means_test_gh,
-    Percentage_Change = percentage_change,
-    Range_Difference = paste0(min_avg_pred, " – ", max_avg_pred)
-  )
-}
-
-if(!NOGDP){print("skip!")}else{
-
-# Define model names and paths (make sure to replace these with actual paths)
-model_names <- c("Accountability", "Inclusion", "Gov. effectiveness", "Rule of law", "Conflict history", "Local conflict", "All pol. predictors")
-model_paths <- c(
-  paste0(models_path, "accountability_model.rds"),
-  paste0(models_path, "inclusion_model.rds"),
-  paste0(models_path, "goveff_model.rds"),
-  paste0(models_path, "ruleoflaw_model.rds"),
-  paste0(models_path, "conflict_country_model.rds"),
-  paste0(models_path, "conflict_sub_model.rds"),
-  "results/panel/aggregate/bayes_models/all_model.rds")
-
-
-# Generate predictions and compute summary statistics for each model
-
-
-model_summaries <- list()
-
-for (i in 1:length(model_names)) {
-  pred <- generate_predictions(model_paths[i], test, test_gh, SEEDNUM)
-  model_summaries[[model_names[i]]] <- compute_summary_stats(pred$predictions, pred$predictions_gh, model_names[i])
-}
-
-# Combine all model summaries into a single data frame
-all_model_summaries <- do.call(rbind, model_summaries)
-
-
-# Assuming all_model_summaries is your data frame
-
-# Create a gt table from the combined summary
-gt_table <- gt(all_model_summaries) %>%
-  fmt_number(
-    columns = c(Avg_Pred_Test, Avg_Pred_Test_gh),
-    decimals = 2,
-    use_seps = TRUE  # This will add the comma for thousands separator
-  ) %>%
-  fmt_number(
-    columns = c(Percentage_Change),
-    decimals = 0,  # Round to 0 decimal places for the percentage change
-    pattern = "{x}%"  # Add the percentage sign
-  ) %>%
-  cols_label(
-    Model = "Model",
-    Avg_Pred_Test = html("y&#770;<sub>obs</sub>"),  # Using HTML entities for hat and subscript
-    Avg_Pred_Test_gh = html("y&#770;<sub>cnt</sub>"),
-    Percentage_Change = html("&Delta;y&#770;"),
-    Range_Difference = html("&Delta;y&#770; (range)")
-  ) %>% 
-  tab_options(table.font.names = 'Arial', table.font.color = "black") 
-# Save the gt table to an HTML file
-gtsave(gt_table, filename = paste0(tables_path, "model_summaries_Ghana.html"))
-gtsave(gt_table, paste0(plots_path, "model_summaries_Ghana.png"))
-
-}
+  pol <- c("brd_12mb","decay_brds_c","v2xpe_exlsocgr" ,"e_wbgi_vae", "e_wbgi_gee",         
+           "v2x_rule" , "v2x_polyarchy", "wdi_gdppc", "hdi_l1")
+  
+  #Ghana vs full dataset comparison
+  
+  #reverse scale for inclusion
+  test$inclusion <- (max(test$v2xpe_exlsocgr) - test$v2xpe_exlsocgr)
+  
+  # Percentiles to calculate
+  percentiles <- c(0.5, 0.9, 0.95, 0.99)
+  
+  # Initialize a list to store results
+  results <- list()
+  
+  pol2 <- c("inclusion" ,"e_wbgi_vae", "e_wbgi_gee",         
+            "v2x_rule" , "v2x_polyarchy",  "wdi_gdppc", "hdi_l1")
+  
+  # Loop through each variable and calculate the specified percentiles
+  for(variable in pol2) {
+    # Extract the column data from the dataframe
+    column_data <- test[[variable]]
+    
+    # Calculate the percentiles for the current variable
+    percentile_values <- quantile(column_data, percentiles, na.rm = TRUE)
+    
+    # Store the results in the list
+    results[[variable]] <- percentile_values
+  }
+  
+  # Print or return the results
+  print(results)
+  
+  # Create a copy of df
+  
+  df_gh <- df
+  train_gh <- train
+  test_gh <- test
+  
+  
+  # Replace values in df_gh with values from gh for the year 2018 for the specified variables
+  for (var in pol) {
+    train_gh[, var] <- gh[, var]
+    test_gh[, var] <- gh[, var]
+    df_gh[, var] <- gh[, var]
+  }
+  
+  ###FIGURE
+  
+  x_limits90 = c(0,200)
+  y_limits = NULL
+  
+  
+  q10 <- function(y) quantile(y, 0.1)
+  q90 <- function(y) quantile(y, 0.9)
+  q25 <- function(y) quantile(y, 0.025)
+  q975 <- function(y) quantile(y, 0.975)
+  
+  
+  ##############All political indicators################
+  
+  #load models
+  fit_all <- readRDS("results/panel/aggregate/bayes_models/all_model.rds")
+  
+  data_all_test <- ppc_stat_data(y = test$dead_w, yrep = posterior_predict(fit_all, newdata = test, allow_new_levels = TRUE), stat = "q90")  
+  data_all_gh_test <- ppc_stat_data(y = test_gh$dead_w, yrep = posterior_predict(fit_all, newdata = test_gh, allow_new_levels = TRUE), stat = "q90") 
+  
+  binwidth_defined <- 3 
+  
+  #Start the ggplot call
+  p <- ggplot() + theme_minimal()
+  
+  
+  #Function to plot histogram
+  
+  add_dataset_layers <- function(p, data, dataset_name, binwidth_defined) {
+    p + 
+      geom_histogram(data = filter(data, variable != "y"), #Assuming 'variable' is the correct column name
+                     aes(x = value, fill = dataset_name), 
+                     color = "black", linewidth = 0.25, na.rm = TRUE, 
+                     binwidth = binwidth_defined) # Apply alpha here
+  }
+  
+  
+  p <- add_dataset_layers(p, data_all_test, "All, actual", binwidth_defined)
+  p <- add_dataset_layers(p, data_all_gh_test, "All, Ghana", binwidth_defined)
+  
+  p <- p + 
+    scale_fill_manual(values = c("All, actual" = alpha("#F44B3E", 0.7), 
+                                 "All, Ghana" = alpha("#2596be", 0.7))) +
+    coord_cartesian(xlim = c(NA, 150)) # Limit x-axis range
+  
+  
+  
+  # Add labels and adjust theme
+  p <- p + labs( x = "Flood deaths", y = "Predicted frequency") + 
+    theme(legend.title = element_blank(),
+          legend.position = "none",
+          plot.title = element_text(size = 14, color = "black", family="Arial", hjust = 0.5),
+          axis.text = element_text(size = 12, color = "black", family="Arial"),
+          legend.text = element_text(size = 12, color = "black", family="Arial"), 
+          axis.title =  element_text(size = 12, color = "black", family="Arial")
+          
+    )
+  # Print the plot
+  print(p)
+  
+  ggsave(paste0(plots_path, "all_counterfactual_outsample_Ghana.png"), height = 5, width = 5)
+  
+  
+  ###SINGLE MODELS; GLOBAL SAMPLE
+  
+  # Figure 5b
+  
+  # Function to load model and generate predictions
+  generate_predictions <- function(model_path, test_data, test_gh_data, SEEDNUM) {
+    # Set the seed for reproducibility
+    set.seed(SEEDNUM)
+    
+    fit <- readRDS(model_path)
+    predictions <- posterior_predict(fit, newdata = test, allow_new_levels = TRUE)
+    predictions_gh <- posterior_predict(fit, newdata = test_gh, allow_new_levels = TRUE)
+    list(predictions = predictions, predictions_gh = predictions_gh)
+  }
+  
+  compute_summary_stats <- function(predictions, predictions_gh, model_name) {
+    # Calculate the means for each set of predictions
+    means_test <- colMeans(predictions)
+    means_test_gh <- colMeans(predictions_gh)
+    
+    # Calculate the average of the means and round to 2 decimal places
+    avg_means_test <- round(mean(means_test), 2)
+    avg_means_test_gh <- round(mean(means_test_gh), 2)
+    
+    # Calculate the percentage change and round to 2 decimal places
+    percentage_change <- round((avg_means_test_gh - avg_means_test) / avg_means_test * 100, 0)
+    
+    # Calculate the range for the average predictions and round to 2 decimal places
+    min_avg_pred <- round(min(means_test) - min(means_test_gh), 2)
+    max_avg_pred <- round(max(means_test) - max(means_test_gh), 2)
+    
+    min_avg_pred<- format(min_avg_pred, big.mark=",",scientific=FALSE)
+    max_avg_pred <- format(max_avg_pred, big.mark=",",scientific=FALSE)
+    
+    # Return a data frame with the summary statistics
+    data.frame(
+      Model = model_name,
+      Avg_Pred_Test = avg_means_test,
+      Avg_Pred_Test_gh = avg_means_test_gh,
+      Percentage_Change = percentage_change,
+      Range_Difference = paste0(min_avg_pred, " – ", max_avg_pred)
+    )
+  }
+  
+  if(!GDP){print("skip!")}else{
+    
+    # Define model names and paths (make sure to replace these with actual paths)
+    model_names <- c("Accountability", "Inclusion", "Gov. effectiveness", "Rule of law", "Conflict history", "Local conflict", "All pol. predictors")
+    model_paths <- c(
+      paste0(models_path, "accountability_model.rds"),
+      paste0(models_path, "inclusion_model.rds"),
+      paste0(models_path, "goveff_model.rds"),
+      paste0(models_path, "ruleoflaw_model.rds"),
+      paste0(models_path, "conflict_country_model.rds"),
+      paste0(models_path, "conflict_sub_model.rds"),
+      "results/panel/aggregate/bayes_models/all_model.rds")
+    
+    
+    # Generate predictions and compute summary statistics for each model
+    
+    
+    model_summaries <- list()
+    
+    for (i in 1:length(model_names)) {
+      pred <- generate_predictions(model_paths[i], test, test_gh, SEEDNUM)
+      model_summaries[[model_names[i]]] <- compute_summary_stats(pred$predictions, pred$predictions_gh, model_names[i])
+    }
+    
+    # Combine all model summaries into a single data frame
+    all_model_summaries <- do.call(rbind, model_summaries)
+    
+    
+    # Assuming all_model_summaries is your data frame
+    
+    # Create a gt table from the combined summary
+    gt_table <- gt(all_model_summaries) %>%
+      fmt_number(
+        columns = c(Avg_Pred_Test, Avg_Pred_Test_gh),
+        decimals = 2,
+        use_seps = TRUE  # This will add the comma for thousands separator
+      ) %>%
+      fmt_number(
+        columns = c(Percentage_Change),
+        decimals = 0,  # Round to 0 decimal places for the percentage change
+        pattern = "{x}%"  # Add the percentage sign
+      ) %>%
+      cols_label(
+        Model = "Model",
+        Avg_Pred_Test = html("y&#770;<sub>obs</sub>"),  # Using HTML entities for hat and subscript
+        Avg_Pred_Test_gh = html("y&#770;<sub>cnt</sub>"),
+        Percentage_Change = html("&Delta;y&#770;"),
+        Range_Difference = html("&Delta;y&#770; (range)")
+      ) %>% 
+      tab_options(table.font.names = 'Arial', table.font.color = "black") 
+    # Save the gt table to an HTML file
+    gtsave(gt_table, filename = paste0(tables_path, "model_summaries_Ghana.html"))
+    gtsave(gt_table, paste0(plots_path, "model_summaries_Ghana.png"))
+    
+  }
 }
 
 
@@ -1911,51 +2310,51 @@ gtsave(gt_table, paste0(plots_path, "model_summaries_Ghana.png"))
 ##################ALTERNATIVE METRICS######################
 ###########################################################
 
-if(NOGDP){
-# Compute WAIC for each model
-waic_in_sample <- map(models, waic)
-waic_out_sample <- map(models, ~ waic(.x, newdata = test, allow_new_levels = TRUE))
-# Format WAIC results (round to 2 digits for the table)
-waic_in_sample_formatted <- map_dbl(waic_in_sample, ~ round(.x$estimates['waic', 'Estimate'], 2))
-waic_out_sample_formatted <- map_dbl(waic_out_sample, ~ round(.x$estimates['waic', 'Estimate'], 2))
-
-
-# Combine WAIC and JS performance metrics into a tibble
-predictive_performance_table_waic <- tibble(
-  mname = names(models),
-  waic_in_sample = waic_in_sample_formatted,
-  waic_out_sample = waic_out_sample_formatted
-)
-
-# Sort by in-sample WAIC (ascending order, smaller is better)
-predictive_performance_table_waic <- predictive_performance_table_waic %>%
-  arrange(waic_in_sample) #lower better -- top model should have small WAIC
-
-
-# Create the final gt table with proper headers for WAIC
-gt_table_waic <- gt(predictive_performance_table_waic) %>%
-  tab_spanner(label = "In-sample (2000-2014)", 
-              columns = c("waic_in_sample")) %>%
-  tab_spanner(label = "Out-of-sample (2015-2018)",
-              columns = c("waic_out_sample")) %>%
-  cols_label(mname = "Model",
-             waic_in_sample = "WAIC",
-             waic_out_sample = "WAIC") %>%
-  tab_options(table.font.names = 'Arial', table.font.color = "black") %>%
-  tab_style(
-    style = list(
-      cell_borders(sides = "left", color = "lightgray", weight = px(2))
-    ),
-    locations = cells_body(columns = c(waic_out_sample))
-  ) %>%
-  tab_style(
-    style = list(
-      cell_borders(sides = "left", color = "lightgray", weight = px(2))
-    ),
-    locations = cells_column_labels(columns = c(waic_out_sample))
-  ) %>%
-  gtsave(paste0(tables_path, "/predictive_performance_waic.tex"))
-
+if(GDP){
+  # Compute WAIC for each model
+  waic_in_sample <- map(models, waic)
+  waic_out_sample <- map(models, ~ waic(.x, newdata = test, allow_new_levels = TRUE))
+  # Format WAIC results (round to 2 digits for the table)
+  waic_in_sample_formatted <- map_dbl(waic_in_sample, ~ round(.x$estimates['waic', 'Estimate'], 2))
+  waic_out_sample_formatted <- map_dbl(waic_out_sample, ~ round(.x$estimates['waic', 'Estimate'], 2))
+  
+  
+  # Combine WAIC and JS performance metrics into a tibble
+  predictive_performance_table_waic <- tibble(
+    mname = names(models),
+    waic_in_sample = waic_in_sample_formatted,
+    waic_out_sample = waic_out_sample_formatted
+  )
+  
+  # Sort by in-sample WAIC (ascending order, smaller is better)
+  predictive_performance_table_waic <- predictive_performance_table_waic %>%
+    arrange(waic_in_sample) #lower better -- top model should have small WAIC
+  
+  
+  # Create the final gt table with proper headers for WAIC
+  gt_table_waic <- gt(predictive_performance_table_waic) %>%
+    tab_spanner(label = "In-sample (2000-2014)", 
+                columns = c("waic_in_sample")) %>%
+    tab_spanner(label = "Out-of-sample (2015-2018)",
+                columns = c("waic_out_sample")) %>%
+    cols_label(mname = "Model",
+               waic_in_sample = "WAIC",
+               waic_out_sample = "WAIC") %>%
+    tab_options(table.font.names = 'Arial', table.font.color = "black") %>%
+    tab_style(
+      style = list(
+        cell_borders(sides = "left", color = "lightgray", weight = px(2))
+      ),
+      locations = cells_body(columns = c(waic_out_sample))
+    ) %>%
+    tab_style(
+      style = list(
+        cell_borders(sides = "left", color = "lightgray", weight = px(2))
+      ),
+      locations = cells_column_labels(columns = c(waic_out_sample))
+    ) %>%
+    gtsave(paste0(tables_path, "/predictive_performance_waic.tex"))
+  
 }
 
 
