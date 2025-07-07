@@ -1,0 +1,45 @@
+\begin{table}
+\centering
+\begin{talltblr}[         %% tabularray outer open
+caption={Poisson Fixed Effects Models (IRR)},
+note{}={† p \num{< 0.1}, ** p \num{< 0.05}, *** p \num{< 0.01}},
+]                     %% tabularray outer close
+{                     %% tabularray inner open
+colspec={Q[]Q[]Q[]Q[]Q[]Q[]Q[]Q[]},
+column{2,3,4,5,6,7,8}={}{halign=c,},
+column{1}={}{halign=l,},
+hline{26}={1,2,3,4,5,6,7,8}{solid, black, 0.05em},
+}                     %% tabularray inner close
+\toprule
+& Baseline & Accountability & Inclusion & Gov. effectiveness & Rule of law & Conflict history & Local conflict \\ \midrule %% TinyTableHeader
+Exposed population & \num{1.774}*** & \num{1.822}*** & \num{1.773}*** & \num{1.762}*** & \num{1.766}*** & \num{1.737}*** & \num{1.612}*** \\
+& [\num{1.398}, \num{2.252}] & [\num{1.436}, \num{2.311}] & [\num{1.400}, \num{2.246}] & [\num{1.405}, \num{2.210}] & [\num{1.394}, \num{2.238}] & [\num{1.398}, \num{2.158}] & [\num{1.292}, \num{2.012}] \\
+Flood severity & \num{0.946} & \num{1.044} & \num{0.954} & \num{1.057} & \num{0.956} & \num{1.016} & \num{0.970} \\
+& [\num{0.475}, \num{1.885}] & [\num{0.529}, \num{2.059}] & [\num{0.484}, \num{1.880}] & [\num{0.510}, \num{2.191}] & [\num{0.483}, \num{1.894}] & [\num{0.501}, \num{2.063}] & [\num{0.564}, \num{1.667}] \\
+Flood duration & \num{1.458}*** & \num{1.408}** & \num{1.458}*** & \num{1.436}** & \num{1.456}** & \num{1.411}** & \num{1.271}** \\
+& [\num{1.098}, \num{1.936}] & [\num{1.069}, \num{1.853}] & [\num{1.096}, \num{1.939}] & [\num{1.078}, \num{1.913}] & [\num{1.092}, \num{1.942}] & [\num{1.073}, \num{1.854}] & [\num{1.013}, \num{1.594}] \\
+Past flood events & \num{6.807}** & \num{8.178}** & \num{7.036}** & \num{4.377}** & \num{7.517}*** & \num{4.375}** & \num{6.354}** \\
+& [\num{1.470}, \num{31.509}] & [\num{1.619}, \num{41.316}] & [\num{1.492}, \num{33.181}] & [\num{1.210}, \num{15.838}] & [\num{1.784}, \num{31.664}] & [\num{1.317}, \num{14.536}] & [\num{1.343}, \num{30.055}] \\
+National GDP per capita & \num{2.048} & \num{2.898} & \num{2.310} & \num{4.499}** & \num{2.754} & \num{3.952}** & \num{3.625} \\
+& [\num{0.398}, \num{10.521}] & [\num{0.543}, \num{15.473}] & [\num{0.394}, \num{13.538}] & [\num{1.062}, \num{19.053}] & [\num{0.582}, \num{13.039}] & [\num{1.132}, \num{13.792}] & [\num{0.634}, \num{20.726}] \\
+Local HDI & \num{0.357} & \num{0.286} & \num{0.336} & \num{0.178} & \num{0.338} & \num{0.876} & \num{0.175} \\
+& [\num{0.005}, \num{26.867}] & [\num{0.004}, \num{22.569}] & [\num{0.004}, \num{26.142}] & [\num{0.002}, \num{13.855}] & [\num{0.004}, \num{28.793}] & [\num{0.009}, \num{82.864}] & [\num{0.003}, \num{11.892}] \\
+Accountability &  & \num{0.148}*** &  &  &  &  &  \\
+&  & [\num{0.042}, \num{0.527}] &  &  &  &  &  \\
+Inclusion &  &  & \num{0.036} &  &  &  &  \\
+&  &  & [\num{0.000}, \num{16.871}] &  &  &  &  \\
+Gov. effectiveness &  &  &  & \num{0.110}** &  &  &  \\
+&  &  &  & [\num{0.016}, \num{0.740}] &  &  &  \\
+Rule of law &  &  &  &  & \num{0.012} &  &  \\
+&  &  &  &  & [\num{0.000}, \num{3.249}] &  &  \\
+Conflict history &  &  &  &  &  & \num{2.041}*** &  \\
+&  &  &  &  &  & [\num{1.249}, \num{3.334}] &  \\
+Local conflict &  &  &  &  &  &  & \num{1.487}*** \\
+&  &  &  &  &  &  & [\num{1.242}, \num{1.779}] \\
+Num.Obs. & \num{2108} & \num{2108} & \num{2108} & \num{2108} & \num{2108} & \num{2108} & \num{2108} \\
+RMSE & \num{253.62} & \num{255.09} & \num{252.92} & \num{244.66} & \num{251.34} & \num{236.51} & \num{208.84} \\
+Country fixed effects & X & X & X & X & X & X & X \\
+Year fixed effects & X & X & X & X & X & X & X \\
+\bottomrule
+\end{talltblr}
+\end{table}
