@@ -145,9 +145,7 @@ df <- readRDS('data/data_final.rds')
 ##Filter by affected population higher than 0 across all specifications
 df = subset(df, df$population_affected > 0)
 
-## For random effects or fixed effects
-df$gwcode <- factor(df$gwcode)
-df$continent <- factor(df$continent)
+
 
 #Invert the scale of exclusion so that it is interpreted as inclusion
 
@@ -198,7 +196,9 @@ df$dead_w <- as.integer(df$dead_w)
 df <- df %>%
   mutate(tropical_flood_dummy = as.integer(tropical_flood > 0))
 
-
+df$gwcode <- factor(df$gwcode)
+df$continent <- factor(df$continent)
+                
 ##define formulas for models
 
 if(NOGDP){
