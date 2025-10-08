@@ -74,7 +74,7 @@ loadfonts(device="win")
 
 SEEDNUM = 352024
 TRAIN_MODELS <- FALSE # To fit the models set this to TRUE
-GDP <-  TRUE ## As it is set up currently, the script runs the analysis for the MAIN SPECIFICATION presented in the manuscript
+GDP <-  FALSE ## As it is set up currently, the script runs the analysis for the MAIN SPECIFICATION presented in the manuscript
 
 ###To run the tests presented in the Supplementary Material, you need to set the appropriate test to TRUE 
 
@@ -83,7 +83,7 @@ AGG <-   FALSE
 CUTOFF <- FALSE
 DEAD <- FALSE
 ECONTEST <- FALSE
-FE <- FALSE
+FE <- TRUE
 INTER <- FALSE 
 NOBNG <- FALSE
 NOCHI <- FALSE
@@ -819,7 +819,8 @@ if (FE) {
     stars       = c('***' = .01, '**' = .05, '†' = .1),
     add_rows    = custom_fe_rows,
     gof_omit    = 'FE:|IC|Log.Lik|Std.Errors|AIC|BIC|Deviance|R2',
-    statistic   = "conf.int",
+    statistic   = c("conf.int", "p.value"),  # Add p-value here
+    fmt         = function(x) sprintf("%.3f", x),  # Format to 3 decimals
     exponentiate = TRUE,  
     output      = paste0(tables_path, "regression_table_FE.tex"),
     title       = "Poisson Fixed Effects Models (IRR)"
@@ -1180,14 +1181,13 @@ if(AGG | ECONTEST | FE) {print('skip!')
                                     all_plots$dfo_severity, all_plots$duration, all_plots$nevents_sum10,
                                     all_plots$rugged, all_plots$tropical_flood, all_plots$wdi_gdppc, ncol = 3)  # Define the layout with 3 columns
   }else if(GDP) {
-    tag_labels <- c("a)", "b)", "c)", "d)", "e)", "f)", "g)", "h)", "i)", "j)", "k)", "l)", "m)", "n)","o)")
+    #tag_labels <- c("a)", "b)", "c)", "d)", "e)", "f)", "g)", "h)", "i)", "j)", "k)", "l)", "m)", "n)","o)")
     combined_plot_all <- wrap_plots(all_plots$e_wbgi_vae, all_plots$e_wbgi_gee, all_plots$decay_brds_c,
                                     all_plots$v2xpe_exlsocgr, all_plots$v2x_rule, all_plots$brd_12mb,
                                       all_plots$v2x_polyarchy,
                                     all_plots$population_affected, all_plots$dfo_severity, all_plots$duration,
                                     all_plots$nevents_sum10, all_plots$rugged, all_plots$tropical_flood,
-                                    all_plots$wdi_gdppc, all_plots$hdi_l1, ncol = 3) + 
-      plot_annotation(tag_levels = list(tag_labels))  
+                                    all_plots$wdi_gdppc, all_plots$hdi_l1, ncol = 3)
     
     # Optional: Adjust the positioning or size of the tags
     combined_plot_all <- combined_plot_all & theme(
@@ -1219,13 +1219,12 @@ if(AGG | ECONTEST | FE) {print('skip!')
                                     }else{
                                       # Combine plots with annotations (letters)
                                       
-                                      tag_labels <- c("a)", "b)", "c)", "d)", "e)", "f)", "g)", "h)", "i)", "j)", "k)", "l)", "m)", "n)")
+                                      
                                       combined_plot_all <- wrap_plots(all_plots$e_wbgi_vae, all_plots$e_wbgi_gee, all_plots$decay_brds_c,
                                                                       all_plots$v2xpe_exlsocgr, all_plots$v2x_rule, all_plots$brd_12mb,
                                                                       all_plots$population_affected, all_plots$dfo_severity, all_plots$duration,
                                                                       all_plots$nevents_sum10, all_plots$rugged, all_plots$tropical_flood,
-                                                                      all_plots$wdi_gdppc, all_plots$hdi_l1, ncol = 3) + 
-                                        plot_annotation(tag_levels = list(tag_labels))  
+                                                                      all_plots$wdi_gdppc, all_plots$hdi_l1, ncol = 3)
                                       
                                       # Optional: Adjust the positioning or size of the tags
                                       combined_plot_all <- combined_plot_all & theme(

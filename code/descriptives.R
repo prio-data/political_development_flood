@@ -288,64 +288,64 @@ ggsave(paste0("results/descriptives/map_flood_pc_inferno_test.png"), plot = g_ma
 
 
 ### Figure S1.
-
-
 df <- readRDS("data/data_final.rds")
-df <- subset(df, df$population_affected >0)
-
-
+df <- subset(df, df$population_affected > 0)
 train <- subset(df, df$year <= 2014)
 test <- subset(df, df$year >= 2015)
 
-
-
-
+# Training data plot with individual points and N labels
 d_train <- ggplot(train, aes(x = log1p(dead_w))) +
   geom_histogram(aes(y = ..count../sum(..count..)), 
                  fill = "#B0E0E6", color = "steelblue4", size = 0.2) + 
-  scale_y_continuous(limits = c(0, 0.8), labels = scales::percent) +
-  scale_x_continuous(breaks = c(0,2, 4, 6, 8, 10, 12))+
-  theme_bw() +
+  geom_text(stat = "bin", aes(y = ..count../sum(..count..), 
+                              label = ifelse(..count.. > 0, ..count.., "")),
+            vjust = -1.2, size = 0.8, family = "Arial", angle = 45) +  # More space above bar
+  geom_jitter(aes(y = 0.005), alpha = 0.6, size = 0.3, 
+              height = 0.003, color = "steelblue4") +
+  scale_y_continuous(limits = c(0, 0.85), labels = scales::percent) +
+  scale_x_continuous(breaks = c(0, 2, 4, 6, 8, 10, 12)) +
+  theme_minimal() +  # Changed to minimal theme
   labs(title = "", 
        x = "Flood mortality (logged)", 
        y = "Percentage") +
-  theme( # Set font family and color globally
-    #plot.title = element_text(size = ),# Adjust title size here
-    plot.title = element_text(size = 6, color = "black", family="Arial", hjust = 0.5),
-    axis.text = element_text(size = 6, color = "black", family="Arial"),
-    legend.text = element_text(size = 6, color = "black", family="Arial"), 
-    axis.title =  element_text(size = 6, color = "black", family="Arial"))
+  theme(
+    plot.title = element_text(size = 4, color = "black", family = "Arial", hjust = 0.5),
+    axis.text = element_text(size = 4, color = "black", family = "Arial"),
+    legend.text = element_text(size = 4, color = "black", family = "Arial"), 
+    axis.title = element_text(size = 4, color = "black", family = "Arial"),
+    panel.grid.major.x = element_blank(),  # Remove vertical major gridlines
+    panel.grid.major.y = element_line(color = "white", size = 0.2),  # Keep horizontal gridlines white
+    panel.grid.minor = element_blank())  # Remove all minor gridlines
 
-
-
-
+# Test data plot with individual points and N labels
 d_test <- ggplot(test, aes(x = log1p(dead_w))) +
-  geom_histogram(aes(y = ..count../sum(..count..) ), 
+  geom_histogram(aes(y = ..count../sum(..count..)), 
                  fill = "#BCE3C5", color = "#02704A", size = 0.2) +
-  theme_bw() + 
-  scale_y_continuous(limits = c(0, 0.8), labels = scales::percent) +
-  scale_x_continuous(breaks = c(0,1, 2, 3, 4, 5, 6))+
+  geom_text(stat = "bin", aes(y = ..count../sum(..count..), 
+                              label = ifelse(..count.. > 0, ..count.., "")),
+            vjust = -1.2, size = 0.8, family = "Arial", angle = 45) +  # More space above bar
+  geom_jitter(aes(y = 0.005), alpha = 0.6, size = 0.3, 
+              height = 0.003, color = "#02704A") +
+  theme_minimal() +  # Changed to minimal theme
+  scale_y_continuous(limits = c(0, 0.85), labels = scales::percent) +
+  scale_x_continuous(breaks = c(0, 1, 2, 3, 4, 5, 6)) +
   labs(title = "", 
        x = "Flood mortality (logged)", 
        y = "Percentage") +
-  theme( # Set font family and color globally
-    #plot.title = element_text(size = ),# Adjust title size here
-    plot.title = element_text(size = 6, color = "black", family="Arial", hjust = 0.5),
-    axis.text = element_text(size = 6, color = "black", family="Arial"),
-    legend.text = element_text(size = 6, color = "black", family="Arial"), 
-    axis.title =  element_text(size = 6, color = "black", family="Arial"))
+  theme(
+    plot.title = element_text(size = 4, color = "black", family = "Arial", hjust = 0.5),
+    axis.text = element_text(size = 4, color = "black", family = "Arial"),
+    legend.text = element_text(size = 4, color = "black", family = "Arial"), 
+    axis.title = element_text(size = 4, color = "black", family = "Arial"),
+    panel.grid.major.x = element_blank(),  # Remove vertical major gridlines
+    panel.grid.major.y = element_line(color = "white", size = 0.2),  # Keep horizontal gridlines white
+    panel.grid.minor = element_blank())  # Remove all minor gridlines
 
-
-d_test
-
-
-ggsave("results/descriptives/hist_train.png", plot = d_train, device="png", width = 2, height = 2, dpi = 350)
-ggsave("results/descriptives/hist_test.png", plot = d_test, device="png", width = 2, height = 2, dpi = 350)
-
-
-
-
-
+# Save with better resolution settings
+ggsave("results/descriptives/hist_train.png", plot = d_train, 
+       device = "png", width = 4.5, height = 4, dpi = 600, units = "cm")
+ggsave("results/descriptives/hist_test.png", plot = d_test, 
+       device = "png", width = 4.5, height = 4, dpi = 600, units = "cm")
 
 #Descriptive statistics: Tables S1-S2
 
