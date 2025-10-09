@@ -1,5 +1,5 @@
 #### This code replicates the analysis in Vesco et al.
-#### Produced by P. Vesco, last updated July 3, 2025
+#### Produced by P. Vesco, last updated October 9, 2025
 
 #The script sets up the model formulas, fits the models, calculates the LOO-CV statistics, creates performance tables and runs the counterfactual analysis presented in the manuscript and SM
 
@@ -74,7 +74,7 @@ loadfonts(device="win")
 
 SEEDNUM = 352024
 TRAIN_MODELS <- FALSE # To fit the models set this to TRUE
-GDP <-  FALSE ## As it is set up currently, the script runs the analysis for the MAIN SPECIFICATION presented in the manuscript
+GDP <-  TRUE ## As it is set up currently, the script runs the analysis for the MAIN SPECIFICATION presented in the manuscript
 
 ###To run the tests presented in the Supplementary Material, you need to set the appropriate test to TRUE 
 
@@ -83,7 +83,7 @@ AGG <-   FALSE
 CUTOFF <- FALSE
 DEAD <- FALSE
 ECONTEST <- FALSE
-FE <- TRUE
+FE <- FALSE
 INTER <- FALSE 
 NOBNG <- FALSE
 NOCHI <- FALSE
