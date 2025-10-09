@@ -97,9 +97,8 @@ OUTLIER <- FALSE
 SPLIT <- FALSE
 
 #### DEFITRUE#### DEFINE RESULTS FOLDER ####
-#setwd("political_development_flood")
+setwd("political_development_flood")
 
-setwd("/Users/paola.vesco/ViEWS Dropbox/Paola Vesco/paola/projects/polimpact/flood_paper/")
 RESULT_FOLDER <- "results/panel"
 
 if(GDP){ RESULT_FOLDER <- paste(RESULT_FOLDER, paste0("GDP"), sep = "/")} 
