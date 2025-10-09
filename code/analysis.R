@@ -1897,8 +1897,8 @@ ggsave(paste0(plots_path, "Fig5a.png"), height = 5, width = 6, dpi = 350)
 generate_predictions <- function(model_path, test_data, test_nz_data, SEEDNUM) {
   set.seed(SEEDNUM)
   fit <- readRDS(model_path)
-  predictions <- posterior_predict(fit, newdata = test, allow_new_levels = TRUE)
-  predictions_nz <- posterior_predict(fit, newdata = test_nz, allow_new_levels = TRUE)
+  predictions <- posterior_predict(fit, newdata = test_data, allow_new_levels = TRUE)
+  predictions_nz <- posterior_predict(fit, newdata = test_nz_data, allow_new_levels = TRUE)
   list(predictions = predictions, predictions_nz = predictions_nz)
 }
 
@@ -2136,8 +2136,8 @@ compute_summary_stats <- function(predictions, predictions_nz, model_name) {
     set.seed(SEEDNUM)
     
     fit <- readRDS(model_path)
-    predictions <- posterior_predict(fit, newdata = test, allow_new_levels = TRUE)
-    predictions_gh <- posterior_predict(fit, newdata = test_gh, allow_new_levels = TRUE)
+    predictions <- posterior_predict(fit, newdata = test_data, allow_new_levels = TRUE)
+    predictions_gh <- posterior_predict(fit, newdata = test_gh_data, allow_new_levels = TRUE)
     list(predictions = predictions, predictions_gh = predictions_gh)
   }
   
