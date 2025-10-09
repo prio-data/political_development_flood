@@ -1759,7 +1759,8 @@ if(ECONTEST){
 if(!GDP){print("skip!")}else{
 #Predictive fit aggregated at global level ####
 
-#Take value of political indicators for New Zealand in 2018
+##Take value of political indicators for New Zealand in 2018 (Note: political predictors are lagged by 1 year. This means that the counterfactual analyses uses actual values of political conditions in New Zealand and Ghana in 2017)
+
 
 nz <- readRDS("data/data_newzealand.Rds") 
 
