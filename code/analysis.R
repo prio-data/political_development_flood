@@ -1755,12 +1755,12 @@ if(ECONTEST){
 
 
 ####COUNTERFACTUAL ANALYSIS####
+##########-----NOTE-----##########
+#All predictors in our analysis are lagged by 1 year. This means that the counterfactual analyses uses actual values of political and socioeconomic conditions in New Zealand and Ghana in 2017, which correspond to 2018 inour data structure. This ensures a fair comparison with the observed data in the counterfactual exercise (which would otherwise compare 2018 in New Zealand with values in 2017 in all other countries in the observed data). e.g. data_newzealand contains predictor values in 2017, not lagged (! despite the name, hdi_l1 is stored as the value of hdi in 2017, NOT 2016, and it has been renamed for practical purposes.) Also note that New Zealand did not have a flood in 2018, hence it is excluded from our main dataset, and this is why we have to use values from the imputed data before matching with flood events. 
 
 if(!GDP){print("skip!")}else{
 #Predictive fit aggregated at global level ####
-
-##Take value of political indicators for New Zealand in 2018 (Note: political predictors are lagged by 1 year. This means that the counterfactual analyses uses actual values of political conditions in New Zealand and Ghana in 2017)
-
+  
 
 nz <- readRDS("data/data_newzealand.Rds") 
 
